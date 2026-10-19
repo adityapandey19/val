@@ -202,7 +202,10 @@
       "json_path": null,
       "ui_value": 5.00,
       "unit": "%",
-      "tolerance": 0.0
+      "tolerance": 0.0,
+      "scrape_config": {
+        "regex": "last recorded at ([\\d.]+) percent"
+      }
     },
     {
       "indicator_id": "fx_rate_usd_pgk",
@@ -242,7 +245,10 @@
       "json_path": null,
       "ui_value": 30.0,
       "unit": "%",
-      "tolerance": 0.0
+      "tolerance": 0.0,
+      "scrape_config": {
+        "regex": "assessed tax at a rate of (\\d+)%"
+      }
     },
     {
       "indicator_id": "gcf_eligibility",
@@ -252,7 +258,11 @@
       "json_path": null,
       "ui_value": "Yes",
       "unit": "status",
-      "tolerance": 0
+      "tolerance": 0,
+      "scrape_config": {
+        "regex": "Papua New Guinea",
+        "value_if_found": "Yes"
+      }
     },
     {
       "indicator_id": "solar_daily_ghi",
@@ -422,7 +432,11 @@
       "json_path": null,
       "ui_value": 12,
       "unit": "years",
-      "tolerance": 0
+      "tolerance": 0,
+      "scrape_config": {
+        "content_type": "pdf",
+        "regex": "Shorter-term Maturity Loans\\s+([\\d]+)"
+      }
     },
     {
       "indicator_id": "proposed_ppa_tariff",
@@ -452,7 +466,11 @@
       "json_path": null,
       "ui_value": 2.0,
       "unit": "%",
-      "tolerance": 0.15
+      "tolerance": 0.15,
+      "scrape_config": {
+        "content_type": "pdf",
+        "regex": "Blend \\(Fixed Rate\\)\\s*[–\\-]\\s*interest charge\\s*2\\/\\s*([\\d.]+)%"
+      }
     },
     {
       "indicator_id": "carbon_price_assumption",

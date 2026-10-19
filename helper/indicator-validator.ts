@@ -1,5 +1,6 @@
 import type { Indicator, IndicatorResult } from "./types";
 import { resolveJsonPath } from "./json-path-resolver";
+import { scrapeValue } from "./scraper";
 
 /** Timeout in milliseconds for fetching external APIs. */
 const FETCH_TIMEOUT_MS = 10_000;
@@ -96,8 +97,11 @@ export async function validateIndicator(
     };
   }
 
-  // ── Skip: no json_path ────────────────────────────────────────────────
-  if (json_path === null || json_path === undefined || json_path === "") {
+  // ── No json_path — try scrape_config, else skip ───────────────────────
+  const hasJsonPath = json_path !== null && json_path !== undefined && json_path !== "";
+  const scrapeConfig = indicator.scrape_config;
+
+  if (!hasJsonPath && !scrapeConfig) {
     return {
       indicator_id,
       display_name,
@@ -109,8 +113,54 @@ export async function validateIndicator(
       status: "SKIPPED",
       is_matched: false,
       message:
-        "No json_path provided — source is likely an HTML page or PDF.",
+        "No json_path or scrape_config provided — cannot extract value.",
     };
+  }
+
+  // ── Scrape path (HTML / PDF) ──────────────────────────────────────────
+  if (!hasJsonPath && scrapeConfig) {
+    try {
+      const scraped = await scrapeValue(source_url, scrapeConfig);
+
+      const { isMatched, difference } = compareValues(
+        scraped,
+        ui_value,
+        tolerance
+      );
+
+      return {
+        indicator_id,
+        display_name,
+        source_url,
+        source_value: scraped,
+        ui_value,
+        tolerance,
+        difference,
+        status: "SUCCESS",
+        is_matched: isMatched,
+        message: null,
+      };
+    } catch (error: unknown) {
+      const message =
+        error instanceof DOMException && error.name === "AbortError"
+          ? `Scrape timed out after 15s.`
+          : error instanceof Error
+            ? error.message
+            : "Unknown scrape error.";
+
+      return {
+        indicator_id,
+        display_name,
+        source_url,
+        source_value: null,
+        ui_value,
+        tolerance,
+        difference: null,
+        status: "ERROR",
+        is_matched: false,
+        message,
+      };
+    }
   }
 
   // ── Fetch from source URL ─────────────────────────────────────────────
@@ -160,7 +210,7 @@ export async function validateIndicator(
     }
 
     // ── Extract value via json_path ───────────────────────────────────
-    const extractedValue = resolveJsonPath(data, json_path);
+    const extractedValue = resolveJsonPath(data, json_path!);
 
     if (extractedValue === undefined || extractedValue === null) {
       return {
