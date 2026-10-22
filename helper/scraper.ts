@@ -1,5 +1,6 @@
 import * as cheerio from "cheerio";
 import type { ScrapeConfig } from "./types";
+import { extractValueFromPdfText } from "./pdf-extractor";
 
 /** Timeout in milliseconds for fetching scrape targets. */
 const SCRAPE_TIMEOUT_MS = 15_000;
@@ -102,22 +103,10 @@ export async function scrapeValue(
       const arrayBuffer = await response.arrayBuffer();
       const buffer = Buffer.from(arrayBuffer);
       const text = await extractPdfText(buffer);
-
-      if (!config.regex) {
-        throw new Error(
-          "PDF sources require a `regex` in scrape_config to extract the value."
-        );
-      }
-
-      const match = text.match(new RegExp(config.regex, "i"));
-      const extracted = match ? (match[1] !== undefined ? match[1] : match[0]) : null;
-      if (!extracted) {
-        throw new Error(
-          `Regex "${config.regex}" did not match any content in the PDF.`
-        );
-      }
-
-      return finalize(extracted);
+      return extractValueFromPdfText(text, {
+        source_url: sourceUrl,
+        scrape_config: config,
+      });
     }
 
     // ── HTML extraction ─────────────────────────────────────────────────

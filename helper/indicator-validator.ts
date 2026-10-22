@@ -1,6 +1,12 @@
 import type { Indicator, IndicatorResult } from "./types";
 import { resolveJsonPath } from "./json-path-resolver";
 import { scrapeValue } from "./scraper";
+import {
+  isPdfTarget,
+  scrapePdfValue,
+  extractPdfText,
+  extractValueFromPdfText,
+} from "./pdf-extractor";
 
 /** Timeout in milliseconds for fetching external APIs. */
 const FETCH_TIMEOUT_MS = 10_000;
@@ -97,31 +103,53 @@ export async function validateIndicator(
     };
   }
 
-  // ── No json_path — try scrape_config, else skip ───────────────────────
   const hasJsonPath = json_path !== null && json_path !== undefined && json_path !== "";
   const scrapeConfig = indicator.scrape_config;
 
-  if (!hasJsonPath && !scrapeConfig) {
-    return {
-      indicator_id,
-      display_name,
-      source_url,
-      source_value: null,
-      ui_value,
-      tolerance,
-      difference: null,
-      status: "SKIPPED",
-      is_matched: false,
-      message:
-        "No json_path or scrape_config provided — cannot extract value.",
-    };
+  // ── Route 1: PDF Target (URL ends with .pdf or explicit PDF content_type) ─
+  if (isPdfTarget(source_url, null, scrapeConfig)) {
+    try {
+      const extracted = await scrapePdfValue(source_url, indicator);
+      const { isMatched, difference } = compareValues(
+        extracted,
+        ui_value,
+        tolerance
+      );
+
+      return {
+        indicator_id,
+        display_name,
+        source_url,
+        source_value: extracted,
+        ui_value,
+        tolerance,
+        difference,
+        status: "SUCCESS",
+        is_matched: isMatched,
+        message: null,
+      };
+    } catch (error: unknown) {
+      const message =
+        error instanceof Error ? error.message : "Unknown PDF extraction error.";
+      return {
+        indicator_id,
+        display_name,
+        source_url,
+        source_value: null,
+        ui_value,
+        tolerance,
+        difference: null,
+        status: "ERROR",
+        is_matched: false,
+        message,
+      };
+    }
   }
 
-  // ── Scrape path (HTML / PDF) ──────────────────────────────────────────
+  // ── Route 2: HTML Scrape Config (CSS selector / Regex / Meta name) ──────
   if (!hasJsonPath && scrapeConfig) {
     try {
       const scraped = await scrapeValue(source_url, scrapeConfig);
-
       const { isMatched, difference } = compareValues(
         scraped,
         ui_value,
@@ -163,6 +191,80 @@ export async function validateIndicator(
     }
   }
 
+  // ── Route 3: No json_path and no scrapeConfig ─────────────────────────
+  // Fetch to check if the server returns a PDF dynamically
+  if (!hasJsonPath && !scrapeConfig) {
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+
+      const response = await fetch(source_url, {
+        signal: controller.signal,
+        headers: {
+          "User-Agent":
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+          Accept: "application/pdf,application/json,text/html,*/*",
+        },
+      });
+
+      clearTimeout(timeoutId);
+
+      const contentType = response.headers.get("content-type") || "";
+      if (contentType.toLowerCase().includes("application/pdf")) {
+        const arrayBuffer = await response.arrayBuffer();
+        const buffer = Buffer.from(arrayBuffer);
+        const text = await extractPdfText(buffer);
+        const extracted = extractValueFromPdfText(text, indicator);
+        const { isMatched, difference } = compareValues(
+          extracted,
+          ui_value,
+          tolerance
+        );
+
+        return {
+          indicator_id,
+          display_name,
+          source_url,
+          source_value: extracted,
+          ui_value,
+          tolerance,
+          difference,
+          status: "SUCCESS",
+          is_matched: isMatched,
+          message: null,
+        };
+      }
+
+      return {
+        indicator_id,
+        display_name,
+        source_url,
+        source_value: null,
+        ui_value,
+        tolerance,
+        difference: null,
+        status: "SKIPPED",
+        is_matched: false,
+        message:
+          "No json_path or scrape_config provided — source is an HTML page.",
+      };
+    } catch {
+      return {
+        indicator_id,
+        display_name,
+        source_url,
+        source_value: null,
+        ui_value,
+        tolerance,
+        difference: null,
+        status: "SKIPPED",
+        is_matched: false,
+        message:
+          "No json_path or scrape_config provided — cannot extract value.",
+      };
+    }
+  }
+
   // ── Fetch from source URL ─────────────────────────────────────────────
   try {
     const controller = new AbortController();
@@ -188,6 +290,49 @@ export async function validateIndicator(
         is_matched: false,
         message: `HTTP ${response.status} ${response.statusText}`,
       };
+    }
+
+    // Check if the endpoint returned a PDF instead of JSON
+    const contentType = response.headers.get("content-type") || "";
+    if (contentType.toLowerCase().includes("application/pdf")) {
+      try {
+        const arrayBuffer = await response.arrayBuffer();
+        const buffer = Buffer.from(arrayBuffer);
+        const text = await extractPdfText(buffer);
+        const extracted = extractValueFromPdfText(text, indicator);
+        const { isMatched, difference } = compareValues(
+          extracted,
+          ui_value,
+          tolerance
+        );
+
+        return {
+          indicator_id,
+          display_name,
+          source_url,
+          source_value: extracted,
+          ui_value,
+          tolerance,
+          difference,
+          status: "SUCCESS",
+          is_matched: isMatched,
+          message: null,
+        };
+      } catch (err: unknown) {
+        return {
+          indicator_id,
+          display_name,
+          source_url,
+          source_value: null,
+          ui_value,
+          tolerance,
+          difference: null,
+          status: "ERROR",
+          is_matched: false,
+          message:
+            err instanceof Error ? err.message : "Failed to extract PDF data.",
+        };
+      }
     }
 
     // Try to parse as JSON
