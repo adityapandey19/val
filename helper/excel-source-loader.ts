@@ -128,7 +128,8 @@ export function loadExcelApiIndicators(): Indicator[] {
         category,
         display_name: `NASA POWER Solar GHI — ${provName}`,
         source_url: url,
-        json_path: "properties.parameter.ALLSKY_SFC_SW_DWN.ANN",
+        json_path:
+          "properties.parameter.ALLSKY_SFC_SW_DWN.202513 || properties.parameter.ALLSKY_SFC_SW_DWN.ANN",
         ui_value: parseFloat(ghiVal.toFixed(2)),
         unit: "kWh/m²/day",
         tolerance: 0.5,
