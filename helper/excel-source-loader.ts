@@ -93,7 +93,35 @@ export function loadExcelApiIndicators(): Indicator[] {
     const scope = (r["Country / Scope"] || "").trim();
     const accessType = r["Access Type"];
 
-    // 1. If pre-mapped in request_json_example.json, preserve that configuration
+    // 1. Solar Resource — Global Solar Atlas (21 rows)
+    if (category.includes("Global Solar Atlas")) {
+      const provName = scope.replace("Papua New Guinea —", "").trim();
+      const provKeys = Object.keys(provinces);
+      const matchKey = provKeys.find(
+        (k) =>
+          k.toLowerCase().includes(provName.toLowerCase()) ||
+          provName.toLowerCase().includes(k.replace("PNG|", "").toLowerCase())
+      );
+      const provData = matchKey ? provinces[matchKey]?.resources || {} : {};
+      const ghiVal =
+        provData.ghi?.value !== undefined
+          ? parseFloat(String(provData.ghi.value))
+          : 1661.55;
+
+      return {
+        indicator_id: `gsa_ghi_${rowNum}`,
+        category,
+        display_name: `Global Solar Atlas GHI — ${provName}`,
+        source_url: url,
+        json_path:
+          "annual.data.GHI || annual.data.PVOUT_csi || annual.data.DNI || annual.data.DIF || annual.data.TEMP || ghi || pvout || dni || dif",
+        ui_value: parseFloat(ghiVal.toFixed(2)),
+        unit: "kWh/m²",
+        tolerance: 5.0,
+      };
+    }
+
+    // 2. If pre-mapped in request_json_example.json, preserve that configuration
     if (reqMap.has(baseUrl)) {
       const existing = reqMap.get(baseUrl)!;
       let id = existing.indicator_id;

@@ -1,35 +1,147 @@
+const GSA_ALIASES: Record<string, string[]> = {
+  pvout: ["PVOUT_csi", "pvout_csi", "pvout"],
+  pvout_csi: ["PVOUT_csi", "pvout"],
+  ghi: ["GHI", "ghi_annual", "annual_ghi", "ghi"],
+  ghi_annual: ["GHI", "ghi"],
+  annual_ghi: ["GHI", "ghi"],
+  dni: ["DNI", "dni"],
+  dif: ["DIF", "dif"],
+  temp: ["TEMP", "temp"],
+  temperature: ["TEMP", "temp"],
+  opta: ["OPTA", "opta", "gti_opta", "GTI_opta"],
+  gti_opta: ["GTI_opta", "gti", "opta", "OPTA"],
+  gti: ["GTI_opta", "gti_opta", "opta"],
+  ele: ["ELE", "ele", "elevation"],
+  elevation: ["ELE", "ele"],
+};
+
+function tokenizePath(pathStr: string): string[] {
+  const clean = pathStr.trim().replace(/^\$\.?/, "");
+  const tokens: string[] = [];
+  const regex = /\[(?:"([^"]+)"|'([^']+)'|([^\]]+))\]|([^.\[\]]+)/g;
+  let match: RegExpExecArray | null;
+  while ((match = regex.exec(clean)) !== null) {
+    const token = match[1] ?? match[2] ?? match[3] ?? match[4];
+    if (token) {
+      tokens.push(token.trim());
+    }
+  }
+  return tokens;
+}
+
+function lookupProperty(
+  obj: Record<string, unknown>,
+  token: string
+): unknown | undefined {
+  if (token in obj && obj[token] !== undefined) {
+    return obj[token];
+  }
+
+  const low = token.toLowerCase();
+  const caseKey = Object.keys(obj).find((k) => k.toLowerCase() === low);
+  if (caseKey && obj[caseKey] !== undefined) {
+    return obj[caseKey];
+  }
+
+  const aliases = GSA_ALIASES[low];
+  if (aliases) {
+    for (const a of aliases) {
+      if (a in obj && obj[a] !== undefined) {
+        return obj[a];
+      }
+      const aCase = Object.keys(obj).find(
+        (k) => k.toLowerCase() === a.toLowerCase()
+      );
+      if (aCase && obj[aCase] !== undefined) {
+        return obj[aCase];
+      }
+    }
+  }
+
+  return undefined;
+}
+
 /**
  * Resolves a single path token chain from a JSON object.
  */
 function resolveSinglePath(data: unknown, pathStr: string): unknown | undefined {
-  // Strip optional root prefix '$' or '$.'
-  const cleanPath = pathStr.trim().replace(/^\$\.?/, "");
-
-  // Tokenize the path into individual keys / indices:
-  // "[1][0].value"                                    → ["1", "0", "value"]
-  // "rates.PGK"                                       → ["rates", "PGK"]
-  // "properties.parameter.ALLSKY_SFC_SW_DWN.202513"   → ["properties", "parameter", "ALLSKY_SFC_SW_DWN", "202513"]
-  const tokens = cleanPath
-    .replace(/\[(\w+)\]/g, ".$1")
-    .split(".")
-    .filter(Boolean);
+  const tokens = tokenizePath(pathStr);
+  if (tokens.length === 0) return undefined;
 
   let current: unknown = data;
 
   for (let i = 0; i < tokens.length; i++) {
-    if (current === null || current === undefined || typeof current !== "object") {
+    if (current === null || current === undefined) {
       return undefined;
     }
 
     const token = tokens[i];
+
+    // Array indexing
+    if (Array.isArray(current)) {
+      const idx = Number(token);
+      if (!Number.isNaN(idx) && idx >= 0 && idx < current.length) {
+        current = current[idx];
+        continue;
+      }
+      return undefined;
+    }
+
+    if (typeof current !== "object") {
+      return undefined;
+    }
+
     const obj = current as Record<string, unknown>;
 
-    if (token in obj && obj[token] !== undefined) {
-      current = obj[token];
+    // 1. Direct or alias property lookup on current object
+    const found = lookupProperty(obj, token);
+    if (found !== undefined) {
+      current = found;
       continue;
     }
 
-    // ── Smart Fallbacks on the final token ──────────────────────────────
+    // 2. Global Solar Atlas format fallbacks at root level: { annual: { data: { ... } }, monthly: { ... } }
+    if (i === 0 && obj.annual && typeof obj.annual === "object") {
+      const ann = obj.annual as Record<string, unknown>;
+
+      // If token is "data" and obj doesn't have data directly, delve into annual.data
+      if (token.toLowerCase() === "data" && ann.data && typeof ann.data === "object") {
+        current = ann.data;
+        continue;
+      }
+
+      // If token matches inside annual.data
+      if (ann.data && typeof ann.data === "object") {
+        const val = lookupProperty(ann.data as Record<string, unknown>, token);
+        if (val !== undefined) {
+          current = val;
+          continue;
+        }
+      }
+
+      // If token matches inside annual.metadata
+      if (ann.metadata && typeof ann.metadata === "object") {
+        const val = lookupProperty(ann.metadata as Record<string, unknown>, token);
+        if (val !== undefined) {
+          current = val;
+          continue;
+        }
+      }
+
+      // If token matches inside monthly.data
+      if (obj.monthly && typeof obj.monthly === "object") {
+        const mon = obj.monthly as Record<string, unknown>;
+        if (mon.data && typeof mon.data === "object") {
+          const val = lookupProperty(mon.data as Record<string, unknown>, token);
+          if (val !== undefined) {
+            current = val;
+            continue;
+          }
+        }
+      }
+    }
+
+    // 3. Smart fallbacks on the final token
     if (i === tokens.length - 1) {
       const keys = Object.keys(obj);
 
@@ -49,26 +161,33 @@ function resolveSinglePath(data: unknown, pathStr: string): unknown | undefined 
         const altKey =
           keys.find((k) => k.toLowerCase() === "ann") ||
           keys.find((k) => k.endsWith("13")) ||
-          keys[keys.length - 1]; // or the latest month
+          keys[keys.length - 1];
         if (altKey && obj[altKey] !== undefined) {
           return obj[altKey];
         }
       }
 
-      // Case C: Object has numeric values (e.g. monthly dictionary)
-      const numericValues = keys
-        .map((k) => Number(obj[k]))
-        .filter((v) => !Number.isNaN(v));
+      // Case C: Object has numeric values where keys are time periods (months/years)
+      const isTimePeriodKey = (k: string) =>
+        /^\d+$/.test(k) ||
+        /^(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)/i.test(k);
 
-      if (numericValues.length > 0) {
-        // If an annual (13th) value exists
-        const thirteenKey = keys.find((k) => k.endsWith("13"));
-        if (thirteenKey && obj[thirteenKey] !== undefined) {
-          return obj[thirteenKey];
+      const timeKeys = keys.filter(isTimePeriodKey);
+      if (timeKeys.length > 0) {
+        const numericValues = timeKeys
+          .map((k) => Number(obj[k]))
+          .filter((v) => !Number.isNaN(v));
+
+        if (numericValues.length > 0) {
+          // If an annual (13th) value exists
+          const thirteenKey = timeKeys.find((k) => k.endsWith("13"));
+          if (thirteenKey && obj[thirteenKey] !== undefined) {
+            return obj[thirteenKey];
+          }
+          // Otherwise mean of periods
+          const sum = numericValues.reduce((a, b) => a + b, 0);
+          return parseFloat((sum / numericValues.length).toFixed(4));
         }
-        // Otherwise mean of months
-        const sum = numericValues.reduce((a, b) => a + b, 0);
-        return parseFloat((sum / numericValues.length).toFixed(4));
       }
     }
 

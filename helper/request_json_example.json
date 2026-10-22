@@ -279,7 +279,7 @@
       "category": "Solar Resource — Global Solar Atlas",
       "display_name": "Annual GHI (National Capital District)",
       "source_url": "https://api.globalsolaratlas.info/data/lta?loc=-9.4431,147.1803",
-      "json_path": "ghi_annual",
+      "json_path": "annual.data.GHI || ghi_annual || ghi",
       "ui_value": 1982.0,
       "unit": "kWh/m2/yr",
       "tolerance": 5.0
@@ -289,7 +289,7 @@
       "category": "Solar Resource — Global Solar Atlas",
       "display_name": "PVOUT Daily",
       "source_url": "https://api.globalsolaratlas.info/data/lta?loc=-9.4431,147.1803",
-      "json_path": "pvout",
+      "json_path": "annual.data.PVOUT_csi || pvout",
       "ui_value": 4.36,
       "unit": "kWh/kWp/day",
       "tolerance": 0.05
