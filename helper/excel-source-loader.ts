@@ -82,6 +82,8 @@ export function loadExcelApiIndicators(): Indicator[] {
   const apiTypes = ["Free API (JSON)", "Free API", "XML", "Free API (CSV)"];
   const apiRows = rows.filter((r) => apiTypes.includes(r["Access Type"]));
 
+  const seenIds = new Set<string>();
+
   return apiRows.map((r) => {
     const url = (r["URL"] || "").trim();
     const baseUrl = url.split("?")[0];
@@ -94,8 +96,14 @@ export function loadExcelApiIndicators(): Indicator[] {
     // 1. If pre-mapped in request_json_example.json, preserve that configuration
     if (reqMap.has(baseUrl)) {
       const existing = reqMap.get(baseUrl)!;
+      let id = existing.indicator_id;
+      if (seenIds.has(id)) {
+        id = `${id}_${rowNum}`;
+      }
+      seenIds.add(id);
+
       return {
-        indicator_id: existing.indicator_id,
+        indicator_id: id,
         category,
         display_name: existing.display_name || desc.split("—")[0].trim(),
         source_url: url,

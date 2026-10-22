@@ -375,12 +375,12 @@ export default function Home() {
                         </td>
                       </tr>
                     ) : (
-                      filteredResults.map((r) => {
+                      filteredResults.map((r, index) => {
                         const isPdf = isPdfResult(r);
                         const isXml = isXmlResult(r);
                         const isCsv = isCsvResult(r);
                         return (
-                          <tr key={r.indicator_id} className="hover:bg-slate-800/40 transition-colors">
+                          <tr key={`${r.indicator_id}-${index}`} className="hover:bg-slate-800/40 transition-colors">
                             <td className="py-3 px-4 whitespace-nowrap font-sans">
                               {r.status === "SUCCESS" && r.is_matched && (
                                 <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
