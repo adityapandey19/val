@@ -1,6 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import path from "path";
-import fs from "fs";
 import type {
   ValidationRequest,
   ValidationResponse,
@@ -8,7 +6,11 @@ import type {
   Indicator,
 } from "@/helper/types";
 import { validateIndicator } from "@/helper/indicator-validator";
-import { buildPdfIndicators } from "@/helper/validate-pdf-sources";
+import {
+  loadExcelApiIndicators,
+  loadPdfIndicators,
+  loadAllIndicators,
+} from "@/helper/excel-source-loader";
 
 /**
  * Helper to execute validation for an array of indicators and construct
@@ -88,44 +90,35 @@ async function processValidation(
 }
 
 /**
- * Loads default fallback indicators:
- *  - If `pdfOnly` is true: loads all 18 PDF source indicators from Excel & template
- *  - Otherwise: loads the benchmark payload from request_json_example.json
+ * Loads indicators according to the requested mode:
+ *  - "pdf": All 18 PDF source indicators from Excel & template
+ *  - "excel" / "api": All 112 structured API indicators from the Excel registry
+ *  - "all": Full unified set of 130 indicators (112 Excel APIs + 18 PDF sources)
  */
-function loadFallbackIndicators(pdfOnly = false): {
+function loadFallbackIndicators(mode: "pdf" | "excel" | "all" = "all"): {
   indicators: Indicator[];
   country: string;
   countryCode: string;
 } {
-  const htmlPath = path.resolve(process.cwd(), "helper/RXBE_live_Template.html");
-  if (pdfOnly && fs.existsSync(htmlPath)) {
+  try {
+    let indicators: Indicator[] = [];
+    if (mode === "pdf") {
+      indicators = loadPdfIndicators();
+    } else if (mode === "excel") {
+      indicators = loadExcelApiIndicators();
+    } else {
+      indicators = loadAllIndicators();
+    }
+
     return {
-      indicators: buildPdfIndicators(htmlPath),
+      indicators,
       country: "Papua New Guinea",
       countryCode: "PG",
     };
+  } catch (err) {
+    console.error("Error loading indicators from source loader:", err);
+    return { indicators: [], country: "Papua New Guinea", countryCode: "PG" };
   }
-
-  const reqJsonPath = path.resolve(process.cwd(), "helper/request_json_example.json");
-  if (fs.existsSync(reqJsonPath)) {
-    const raw = fs.readFileSync(reqJsonPath, "utf-8");
-    const parsed = JSON.parse(raw) as ValidationRequest;
-    return {
-      indicators: parsed.indicators ?? [],
-      country: parsed.project_metadata?.country ?? "Papua New Guinea",
-      countryCode: parsed.project_metadata?.country_code ?? "PG",
-    };
-  }
-
-  if (fs.existsSync(htmlPath)) {
-    return {
-      indicators: buildPdfIndicators(htmlPath),
-      country: "Papua New Guinea",
-      countryCode: "PG",
-    };
-  }
-
-  return { indicators: [], country: "Unknown", countryCode: "XX" };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -133,7 +126,13 @@ function loadFallbackIndicators(pdfOnly = false): {
 // ─────────────────────────────────────────────────────────────────────────────
 export async function POST(request: NextRequest) {
   try {
-    let body: (Partial<ValidationRequest> & { pdf_only?: boolean; from_template?: boolean }) = {};
+    let body: (Partial<ValidationRequest> & {
+      pdf_only?: boolean;
+      excel_only?: boolean;
+      from_template?: boolean;
+      all?: boolean;
+    }) = {};
+
     try {
       body = (await request.json()) ?? {};
     } catch {
@@ -147,9 +146,14 @@ export async function POST(request: NextRequest) {
     if (Array.isArray(body.indicators) && body.indicators.length > 0) {
       indicators = body.indicators;
     } else {
-      // Automatic fallback if no indicators array was provided
-      const isPdfOnly = body.pdf_only === true || body.from_template === true;
-      const fallback = loadFallbackIndicators(isPdfOnly);
+      let mode: "pdf" | "excel" | "all" = "all";
+      if (body.pdf_only === true || body.from_template === true) {
+        mode = "pdf";
+      } else if (body.excel_only === true) {
+        mode = "excel";
+      }
+
+      const fallback = loadFallbackIndicators(mode);
       indicators = fallback.indicators;
       country = fallback.country;
       countryCode = fallback.countryCode;
@@ -181,14 +185,26 @@ export async function POST(request: NextRequest) {
 // ─────────────────────────────────────────────────────────────────────────────
 // GET /api/data
 // Query parameters:
-//   - ?pdf_only=true   -> Validates the 18 PDF source indicators from Excel/Template
-//   - ?all=true        -> Validates all 45 indicators from request_json_example.json
+//   - ?pdf_only=true    -> Validates the 18 PDF source indicators
+//   - ?excel_only=true  -> Validates the 112 Excel API source indicators
+//   - ?all=true         -> Validates all 130 indicators (112 Excel APIs + 18 PDFs)
 // ─────────────────────────────────────────────────────────────────────────────
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
-    const pdfOnly = searchParams.get("pdf_only") !== "false" && searchParams.get("all") !== "true";
-    const fallback = loadFallbackIndicators(pdfOnly);
+    const isPdfOnly = searchParams.get("pdf_only") === "true";
+    const isExcelOnly =
+      searchParams.get("excel_only") === "true" ||
+      searchParams.get("api_only") === "true";
+
+    let mode: "pdf" | "excel" | "all" = "all";
+    if (isPdfOnly) {
+      mode = "pdf";
+    } else if (isExcelOnly) {
+      mode = "excel";
+    }
+
+    const fallback = loadFallbackIndicators(mode);
 
     if (fallback.indicators.length === 0) {
       return NextResponse.json(

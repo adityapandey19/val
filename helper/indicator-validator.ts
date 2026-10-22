@@ -272,7 +272,11 @@ export async function validateIndicator(
 
     const response = await fetch(source_url, {
       signal: controller.signal,
-      headers: { Accept: "application/json" },
+      headers: {
+        "User-Agent":
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        Accept: "application/json, application/xml, text/xml, text/csv, text/html, */*",
+      },
     });
 
     clearTimeout(timeoutId);
@@ -292,8 +296,9 @@ export async function validateIndicator(
       };
     }
 
-    // Check if the endpoint returned a PDF instead of JSON
     const contentType = response.headers.get("content-type") || "";
+
+    // ── Check if the endpoint returned a PDF ───────────────────────────
     if (contentType.toLowerCase().includes("application/pdf")) {
       try {
         const arrayBuffer = await response.arrayBuffer();
@@ -335,10 +340,86 @@ export async function validateIndicator(
       }
     }
 
-    // Try to parse as JSON
+    // Read response text
+    const rawText = await response.text();
+
+    // ── Check if the endpoint returned XML / RSS ───────────────────────
+    const isXml =
+      contentType.includes("xml") ||
+      rawText.trim().startsWith("<?xml") ||
+      rawText.includes("<rss") ||
+      rawText.includes("<feed");
+
+    if (isXml) {
+      const itemCount = (
+        rawText.match(/<item[\s>]/gi) || rawText.match(/<entry[\s>]/gi) || []
+      ).length;
+      const extracted = itemCount > 0 ? `Active (${itemCount} items)` : "Active";
+      const isMatched =
+        String(ui_value).toLowerCase() === "active" ||
+        String(ui_value).toLowerCase().includes("active") ||
+        itemCount > 0;
+
+      return {
+        indicator_id,
+        display_name,
+        source_url,
+        source_value: extracted,
+        ui_value,
+        tolerance,
+        difference: null,
+        status: "SUCCESS",
+        is_matched: isMatched,
+        message: null,
+      };
+    }
+
+    // ── Check if the endpoint returned CSV ─────────────────────────────
+    const isCsv =
+      contentType.includes("csv") ||
+      source_url.toLowerCase().endsWith(".csv") ||
+      source_url.includes("format=csv");
+
+    if (isCsv) {
+      const lines = rawText.trim().split("\n").filter((l) => l.trim().length > 0);
+      let extracted: string | number = `Active (${lines.length} rows)`;
+
+      // If ui_value is a number, try to parse the last non-empty line
+      if (typeof ui_value === "number" && lines.length > 1) {
+        const lastCols = lines[lines.length - 1].split(",");
+        for (let i = lastCols.length - 1; i >= 0; i--) {
+          const num = parseFloat(lastCols[i].trim());
+          if (!isNaN(num)) {
+            extracted = num;
+            break;
+          }
+        }
+      }
+
+      const { isMatched, difference } = compareValues(
+        extracted,
+        ui_value,
+        tolerance
+      );
+
+      return {
+        indicator_id,
+        display_name,
+        source_url,
+        source_value: extracted,
+        ui_value,
+        tolerance,
+        difference,
+        status: "SUCCESS",
+        is_matched: isMatched || String(ui_value).toLowerCase() === "available",
+        message: null,
+      };
+    }
+
+    // ── Try to parse as JSON ───────────────────────────────────────────
     let data: unknown;
     try {
-      data = await response.json();
+      data = JSON.parse(rawText);
     } catch {
       return {
         indicator_id,

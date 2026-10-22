@@ -8,13 +8,19 @@ export default function Home() {
   const [data, setData] = useState<ValidationResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
-  const [filter, setFilter] = useState<"ALL" | "MATCHED" | "MISMATCHED" | "SKIPPED" | "ERROR" | "PDF">("ALL");
+  const [filter, setFilter] = useState<
+    "ALL" | "MATCHED" | "MISMATCHED" | "SKIPPED" | "ERROR" | "PDF" | "API" | "FEED"
+  >("ALL");
   const [activeTab, setActiveTab] = useState<"dashboard" | "json">("dashboard");
   const [customJson, setCustomJson] = useState("");
+  const [currentMode, setCurrentMode] = useState<"pdf" | "excel" | "all">("all");
 
-  async function runValidation(mode: "pdf" | "all" | "custom") {
+  async function runValidation(mode: "pdf" | "excel" | "all" | "custom") {
     setLoading(true);
     setError(null);
+    if (mode !== "custom") {
+      setCurrentMode(mode);
+    }
     try {
       let res: Response;
       if (mode === "custom") {
@@ -31,6 +37,8 @@ export default function Home() {
         });
       } else if (mode === "pdf") {
         res = await fetch("/api/data?pdf_only=true");
+      } else if (mode === "excel") {
+        res = await fetch("/api/data?excel_only=true");
       } else {
         res = await fetch("/api/data?all=true");
       }
@@ -52,10 +60,10 @@ export default function Home() {
     }
   }
 
-  // Run PDF validation on initial mount
+  // Load all indicators on initial mount
   useEffect(() => {
     let ignore = false;
-    fetch("/api/data?pdf_only=true")
+    fetch("/api/data?all=true")
       .then((res) => {
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         return res.json();
@@ -77,19 +85,46 @@ export default function Home() {
 
   const isPdfResult = (r: IndicatorResult) => {
     const url = (r.source_url || "").toLowerCase();
+    return url.endsWith(".pdf") || url.includes(".pdf");
+  };
+
+  const isXmlResult = (r: IndicatorResult) => {
+    const url = (r.source_url || "").toLowerCase();
+    const id = (r.indicator_id || "").toLowerCase();
     return (
-      url.endsWith(".pdf") ||
-      url.includes(".pdf") ||
-      r.indicator_id.includes("blend") ||
-      r.indicator_id.includes("tenor") ||
-      r.indicator_id.includes("bready") ||
-      r.indicator_id.includes("jica") ||
-      r.indicator_id.includes("customary") ||
-      r.indicator_id.includes("land_act")
+      url.includes("/rss/") ||
+      url.includes(".xml") ||
+      id.includes("xml_feed") ||
+      id.includes("news_")
     );
   };
 
-  const filteredResults = (data?.results ?? []).filter((r) => {
+  const isCsvResult = (r: IndicatorResult) => {
+    const url = (r.source_url || "").toLowerCase();
+    const id = (r.indicator_id || "").toLowerCase();
+    return (
+      url.endsWith(".csv") ||
+      url.includes("format=csv") ||
+      id.includes("csv_")
+    );
+  };
+
+  const isApiResult = (r: IndicatorResult) => {
+    return (
+      !isPdfResult(r) &&
+      !isXmlResult(r) &&
+      !isCsvResult(r) &&
+      (r.source_url || "").startsWith("http")
+    );
+  };
+
+  const allResults = data?.results ?? [];
+
+  const pdfCount = allResults.filter(isPdfResult).length;
+  const apiCount = allResults.filter(isApiResult).length;
+  const xmlCount = allResults.filter(isXmlResult).length;
+
+  const filteredResults = allResults.filter((r) => {
     const matchesSearch =
       r.indicator_id.toLowerCase().includes(search.toLowerCase()) ||
       r.display_name.toLowerCase().includes(search.toLowerCase()) ||
@@ -102,6 +137,8 @@ export default function Home() {
     if (filter === "SKIPPED") return r.status === "SKIPPED";
     if (filter === "ERROR") return r.status === "ERROR";
     if (filter === "PDF") return isPdfResult(r);
+    if (filter === "API") return isApiResult(r);
+    if (filter === "FEED") return isXmlResult(r) || isCsvResult(r);
     return true;
   });
 
@@ -131,25 +168,42 @@ export default function Home() {
             </p>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-2.5">
             <button
               onClick={() => runValidation("pdf")}
               disabled={loading}
-              className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white font-medium text-sm transition-colors shadow-lg shadow-emerald-950 flex items-center gap-2 cursor-pointer"
+              className={`px-3.5 py-2 rounded-lg font-medium text-xs transition-colors shadow-lg flex items-center gap-1.5 cursor-pointer ${
+                currentMode === "pdf"
+                  ? "bg-emerald-600 text-white shadow-emerald-950 ring-2 ring-emerald-400/50"
+                  : "bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700"
+              }`}
             >
-              {loading ? (
-                <span className="inline-block animate-spin">⏳</span>
-              ) : (
-                <span>📄</span>
-              )}
+              <span>📄</span>
               Validate PDF Sources (18)
+            </button>
+            <button
+              onClick={() => runValidation("excel")}
+              disabled={loading}
+              className={`px-3.5 py-2 rounded-lg font-medium text-xs transition-colors shadow-lg flex items-center gap-1.5 cursor-pointer ${
+                currentMode === "excel"
+                  ? "bg-sky-600 text-white shadow-sky-950 ring-2 ring-sky-400/50"
+                  : "bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700"
+              }`}
+            >
+              <span>🌐</span>
+              Excel APIs (112)
             </button>
             <button
               onClick={() => runValidation("all")}
               disabled={loading}
-              className="px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 disabled:opacity-50 text-slate-200 font-medium text-sm transition-colors border border-slate-700 flex items-center gap-2 cursor-pointer"
+              className={`px-3.5 py-2 rounded-lg font-medium text-xs transition-colors shadow-lg flex items-center gap-1.5 cursor-pointer ${
+                currentMode === "all"
+                  ? "bg-indigo-600 text-white shadow-indigo-950 ring-2 ring-indigo-400/50"
+                  : "bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700"
+              }`}
             >
-              <span>🌐</span> All Indicators (45)
+              <span>📊</span>
+              All Indicators (130)
             </button>
           </div>
         </header>
@@ -263,8 +317,10 @@ export default function Home() {
               <div className="flex items-center gap-2 overflow-x-auto pb-1 sm:pb-0">
                 {(
                   [
-                    ["ALL", "All"],
-                    ["PDF", "📄 PDF Only"],
+                    ["ALL", `All (${allResults.length})`],
+                    ["PDF", `📄 PDF Only (${pdfCount})`],
+                    ["API", `🌐 REST APIs (${apiCount})`],
+                    ["FEED", `📡 Feeds / XML (${xmlCount})`],
                     ["MATCHED", "✅ Matched"],
                     ["MISMATCHED", "❌ Mismatch"],
                     ["SKIPPED", "⚠️ Skipped"],
@@ -321,6 +377,8 @@ export default function Home() {
                     ) : (
                       filteredResults.map((r) => {
                         const isPdf = isPdfResult(r);
+                        const isXml = isXmlResult(r);
+                        const isCsv = isCsvResult(r);
                         return (
                           <tr key={r.indicator_id} className="hover:bg-slate-800/40 transition-colors">
                             <td className="py-3 px-4 whitespace-nowrap font-sans">
@@ -355,6 +413,14 @@ export default function Home() {
                               {isPdf ? (
                                 <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-semibold bg-indigo-500/10 text-indigo-300 border border-indigo-500/20">
                                   📄 PDF Document
+                                </span>
+                              ) : isXml ? (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-semibold bg-purple-500/10 text-purple-300 border border-purple-500/20">
+                                  📡 XML / Feed
+                                </span>
+                              ) : isCsv ? (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-semibold bg-teal-500/10 text-teal-300 border border-teal-500/20">
+                                  📊 CSV Data
                                 </span>
                               ) : r.source_url.startsWith("http") ? (
                                 <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-semibold bg-sky-500/10 text-sky-300 border border-sky-500/20">
