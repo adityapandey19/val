@@ -112,7 +112,34 @@ function resolveSinglePath(data: unknown, pathStr: string): unknown | undefined 
 
       // If token matches inside annual.data
       if (ann.data && typeof ann.data === "object") {
-        const val = lookupProperty(ann.data as Record<string, unknown>, token);
+        const d = ann.data as Record<string, unknown>;
+        const low = token.toLowerCase();
+
+        if (low === "daily_ghi" || low === "ghi_daily") {
+          const ghi = lookupProperty(d, "GHI");
+          if (ghi !== undefined) {
+            current = parseFloat((Number(ghi) / 365).toFixed(2));
+            continue;
+          }
+        }
+
+        if (low === "daily_pvout" || low === "pvout_daily") {
+          const pv = lookupProperty(d, "PVOUT_csi");
+          if (pv !== undefined) {
+            current = parseFloat((Number(pv) / 365).toFixed(2));
+            continue;
+          }
+        }
+
+        if (low === "cuf" || low === "solar_cuf") {
+          const pv = lookupProperty(d, "PVOUT_csi");
+          if (pv !== undefined) {
+            current = parseFloat(((Number(pv) / (365 * 24)) * 100).toFixed(1));
+            continue;
+          }
+        }
+
+        const val = lookupProperty(d, token);
         if (val !== undefined) {
           current = val;
           continue;

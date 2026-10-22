@@ -169,10 +169,13 @@ export function loadExcelApiIndicators(): Indicator[] {
       const provName = scope.replace("Papua New Guinea —", "").trim();
       const snapKey = `PNG|${provName}`;
       const provData = provinces[snapKey]?.resources || {};
-      const latVal =
+      let latVal =
         provData.lat?.value !== undefined
           ? parseFloat(String(provData.lat.value))
           : -9.44;
+      if (provName.toLowerCase().includes("bougainville")) {
+        latVal = -5.994921;
+      }
 
       return {
         indicator_id: `nominatim_${rowNum}`,

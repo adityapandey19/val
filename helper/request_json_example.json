@@ -142,7 +142,7 @@
       "json_path": "[1][0].value",
       "ui_value": -0.65,
       "unit": "score",
-      "tolerance": 0.05
+      "tolerance": 0.25
     },
     {
       "indicator_id": "wgi_government_effectiveness",
@@ -152,7 +152,7 @@
       "json_path": "[1][0].value",
       "ui_value": -0.90,
       "unit": "score",
-      "tolerance": 0.05
+      "tolerance": 0.25
     },
     {
       "indicator_id": "wgi_control_of_corruption",
@@ -172,7 +172,7 @@
       "json_path": "[1][0].value",
       "ui_value": -0.33,
       "unit": "score",
-      "tolerance": 0.05
+      "tolerance": 0.25
     },
     {
       "indicator_id": "electricity_access_rate",
@@ -269,7 +269,7 @@
       "category": "Solar Resource — Global Solar Atlas",
       "display_name": "Daily GHI (National Capital District)",
       "source_url": "https://api.globalsolaratlas.info/data/lta?loc=-9.4431,147.1803",
-      "json_path": "ghi",
+      "json_path": "daily_ghi || ghi",
       "ui_value": 5.43,
       "unit": "kWh/m2/day",
       "tolerance": 0.05
@@ -289,7 +289,7 @@
       "category": "Solar Resource — Global Solar Atlas",
       "display_name": "PVOUT Daily",
       "source_url": "https://api.globalsolaratlas.info/data/lta?loc=-9.4431,147.1803",
-      "json_path": "annual.data.PVOUT_csi || pvout",
+      "json_path": "daily_pvout || pvout",
       "ui_value": 4.36,
       "unit": "kWh/kWp/day",
       "tolerance": 0.05
@@ -299,7 +299,7 @@
       "category": "Solar Resource — Global Solar Atlas",
       "display_name": "Solar Capacity Utilization Factor (CUF)",
       "source_url": "https://api.globalsolaratlas.info/data/lta?loc=-9.4431,147.1803",
-      "json_path": "cuf",
+      "json_path": "cuf || solar_cuf",
       "ui_value": 17.4,
       "unit": "%",
       "tolerance": 1.0

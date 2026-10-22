@@ -24,44 +24,61 @@ function isInternalSource(url: string): boolean {
 }
 
 /**
- * Compares two values using the indicator's tolerance.
- *
- * - Numeric values: `|source - ui| <= tolerance`
- * - String values:  exact (case-insensitive) equality; tolerance is ignored.
+ * Helper to parse a value into a finite number, or null if not numeric.
+ */
+function parseNumeric(val: unknown): number | null {
+  if (val === null || val === undefined || typeof val === "boolean") {
+    return null;
+  }
+  if (typeof val === "number") {
+    return Number.isNaN(val) ? null : val;
+  }
+  if (typeof val === "string") {
+    const trimmed = val.trim();
+    if (trimmed === "") return null;
+    const num = Number(trimmed);
+    return Number.isNaN(num) ? null : num;
+  }
+  return null;
+}
+
+/**
+ * Compares source_value vs ui_value using dual-mode tolerance:
+ * - If both can be parsed as numbers:
+ *     absolute: |source - ui| <= tolerance
+ *     relative: |(source - ui) / ui| <= tolerance
+ * - Otherwise (words, status codes): exact (case-insensitive) string equality.
  */
 function compareValues(
   sourceValue: unknown,
   uiValue: number | string,
   tolerance: number
 ): { isMatched: boolean; difference: number | null } {
-  // ---- string comparison ----
-  if (typeof uiValue === "string" || typeof sourceValue === "string") {
-    const isMatched =
-      String(sourceValue).trim().toLowerCase() ===
-      String(uiValue).trim().toLowerCase();
-    return { isMatched, difference: null };
-  }
+  const srcNum = parseNumeric(sourceValue);
+  const uiNum = parseNumeric(uiValue);
 
   // ---- numeric comparison (dual-mode tolerance) ----
-  const srcNum = Number(sourceValue);
-  if (Number.isNaN(srcNum)) {
-    return { isMatched: false, difference: null };
+  if (srcNum !== null && uiNum !== null) {
+    const diff = srcNum - uiNum;
+    const absDiff = Math.abs(diff);
+
+    // Mode 1: absolute — |difference| ≤ tolerance
+    const absoluteMatch = absDiff <= tolerance;
+
+    // Mode 2: relative — |difference / ui_value| ≤ tolerance  (as a fraction)
+    // Avoids division by zero; when ui_value is 0, only absolute mode applies.
+    const relativeMatch =
+      uiNum !== 0 && Math.abs(diff / uiNum) <= tolerance;
+
+    const isMatched = absoluteMatch || relativeMatch;
+    return { isMatched, difference: parseFloat(diff.toFixed(10)) };
   }
 
-  const uiNum = Number(uiValue);
-  const diff = srcNum - uiNum;
-  const absDiff = Math.abs(diff);
-
-  // Mode 1: absolute — |difference| ≤ tolerance
-  const absoluteMatch = absDiff <= tolerance;
-
-  // Mode 2: relative — |difference / ui_value| ≤ tolerance  (as a fraction)
-  // Avoids division by zero; when ui_value is 0, only absolute mode applies.
-  const relativeMatch =
-    uiNum !== 0 && Math.abs(diff / uiNum) <= tolerance;
-
-  const isMatched = absoluteMatch || relativeMatch;
-  return { isMatched, difference: parseFloat(diff.toFixed(10)) };
+  // ---- string comparison ----
+  const isMatched =
+    String(sourceValue).trim().toLowerCase() ===
+    String(uiValue).trim().toLowerCase();
+  return { isMatched, difference: null };
 }
 
 // ---------------------------------------------------------------------------
