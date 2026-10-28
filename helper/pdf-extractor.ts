@@ -86,7 +86,7 @@ function parseExtractedScalar(raw: string): number | string {
 }
 
 // ---------------------------------------------------------------------------
-// Domain Rules for RXBE PDF Sources (from RXBE_PNG_AllSources_081026.xlsx)
+// Domain Rules for RXBE PDF Sources
 // ---------------------------------------------------------------------------
 
 function matchRxbeDomainRules(

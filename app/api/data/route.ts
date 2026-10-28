@@ -7,9 +7,7 @@ import type {
 } from "@/helper/types";
 import { validateIndicator } from "@/helper/indicator-validator";
 import {
-  loadExcelApiIndicators,
   loadPdfIndicators,
-  loadAllIndicators,
   loadWizardStep1Indicators,
 } from "@/helper/excel-source-loader";
 
@@ -22,32 +20,41 @@ async function processValidation(
   country = "Papua New Guinea",
   countryCode = "PG"
 ): Promise<ValidationResponse> {
-  const settledResults = await Promise.allSettled(
-    indicators.map((indicator) => validateIndicator(indicator))
-  );
+  // Use a worker pool with max 4 concurrent requests to prevent bandwidth exhaustion,
+  // Nominatim rate-limiting (max 1 req/sec), and timeout cascades on slower connections.
+  const CONCURRENCY = 4;
+  const results: IndicatorResult[] = new Array(indicators.length);
+  let currentIndex = 0;
 
-  const results: IndicatorResult[] = settledResults.map((settled, index) => {
-    if (settled.status === "fulfilled") {
-      return settled.value;
+  async function worker() {
+    while (currentIndex < indicators.length) {
+      const idx = currentIndex++;
+      const indicator = indicators[idx];
+      try {
+        results[idx] = await validateIndicator(indicator);
+      } catch (error) {
+        results[idx] = {
+          indicator_id: indicator.indicator_id,
+          display_name: indicator.display_name,
+          source_url: indicator.source_url,
+          source_value: null,
+          ui_value: indicator.ui_value,
+          tolerance: indicator.tolerance,
+          difference: null,
+          status: "ERROR" as const,
+          is_matched: false,
+          message:
+            error instanceof Error
+              ? error.message
+              : "Unexpected validation failure.",
+        };
+      }
     }
+  }
 
-    const indicator = indicators[index];
-    return {
-      indicator_id: indicator.indicator_id,
-      display_name: indicator.display_name,
-      source_url: indicator.source_url,
-      source_value: null,
-      ui_value: indicator.ui_value,
-      tolerance: indicator.tolerance,
-      difference: null,
-      status: "ERROR" as const,
-      is_matched: false,
-      message:
-        settled.reason instanceof Error
-          ? settled.reason.message
-          : "Unexpected validation failure.",
-    };
-  });
+  const workerCount = Math.min(CONCURRENCY, indicators.length);
+  const workers = Array.from({ length: workerCount }, () => worker());
+  await Promise.all(workers);
 
   let matched = 0;
   let mismatched = 0;
@@ -92,27 +99,17 @@ async function processValidation(
 
 /**
  * Loads indicators according to the requested mode:
- *  - "wizard" / "step1": All 34 Wizard Step 1 indicators from RXBE_Wizard_Step1_Sources_Keys.xlsx
- *  - "pdf": All 18 PDF source indicators from Excel & template
- *  - "excel" / "api": All 112 structured API indicators from the Excel registry
- *  - "all": Full unified set of 130 indicators (112 Excel APIs + 18 PDF sources)
+ *  - "wizard": All 34 Wizard Step 1 indicators from RXBE_Wizard_Step1_Sources_Keys.xlsx
+ *  - "pdf": All 18 PDF source indicators from RXBE_live_Template.html
  */
-function loadFallbackIndicators(mode: "wizard" | "pdf" | "excel" | "all" = "all"): {
+function loadFallbackIndicators(mode: "wizard" | "pdf" = "wizard"): {
   indicators: Indicator[];
   country: string;
   countryCode: string;
 } {
   try {
-    let indicators: Indicator[] = [];
-    if (mode === "wizard") {
-      indicators = loadWizardStep1Indicators();
-    } else if (mode === "pdf") {
-      indicators = loadPdfIndicators();
-    } else if (mode === "excel") {
-      indicators = loadExcelApiIndicators();
-    } else {
-      indicators = loadAllIndicators();
-    }
+    const indicators =
+      mode === "pdf" ? loadPdfIndicators() : loadWizardStep1Indicators();
 
     return {
       indicators,
@@ -132,9 +129,7 @@ export async function POST(request: NextRequest) {
   try {
     let body: (Partial<ValidationRequest> & {
       pdf_only?: boolean;
-      excel_only?: boolean;
       from_template?: boolean;
-      all?: boolean;
     }) = {};
 
     try {
@@ -150,12 +145,10 @@ export async function POST(request: NextRequest) {
     if (Array.isArray(body.indicators) && body.indicators.length > 0) {
       indicators = body.indicators;
     } else {
-      let mode: "pdf" | "excel" | "all" = "all";
-      if (body.pdf_only === true || body.from_template === true) {
-        mode = "pdf";
-      } else if (body.excel_only === true) {
-        mode = "excel";
-      }
+      const mode: "wizard" | "pdf" =
+        body.pdf_only === true || body.from_template === true
+          ? "pdf"
+          : "wizard";
 
       const fallback = loadFallbackIndicators(mode);
       indicators = fallback.indicators;
@@ -167,7 +160,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         {
           message:
-            "Invalid request: `indicators` array is required or could not be loaded from template.",
+            "Invalid request: `indicators` array is required or could not be loaded.",
         },
         { status: 400 }
       );
@@ -190,28 +183,13 @@ export async function POST(request: NextRequest) {
 // GET /api/data
 // Query parameters:
 //   - ?pdf_only=true    -> Validates the 18 PDF source indicators
-//   - ?excel_only=true  -> Validates the 112 Excel API source indicators
-//   - ?all=true         -> Validates all 130 indicators (112 Excel APIs + 18 PDFs)
+//   - default           -> Validates the 34 Wizard Step 1 indicators
 // ─────────────────────────────────────────────────────────────────────────────
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
-    const isWizard =
-      searchParams.get("wizard") === "true" ||
-      searchParams.get("step1") === "true";
     const isPdfOnly = searchParams.get("pdf_only") === "true";
-    const isExcelOnly =
-      searchParams.get("excel_only") === "true" ||
-      searchParams.get("api_only") === "true";
-
-    let mode: "wizard" | "pdf" | "excel" | "all" = "all";
-    if (isWizard) {
-      mode = "wizard";
-    } else if (isPdfOnly) {
-      mode = "pdf";
-    } else if (isExcelOnly) {
-      mode = "excel";
-    }
+    const mode: "wizard" | "pdf" = isPdfOnly ? "pdf" : "wizard";
 
     const fallback = loadFallbackIndicators(mode);
 

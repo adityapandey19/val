@@ -3,24 +3,25 @@
 import { useState, useEffect } from "react";
 import type { ValidationResponse, IndicatorResult } from "@/helper/types";
 
+type ModeType = "wizard" | "pdf" | "custom";
+type TypeFilter = "ALL" | "SCRAPE" | "FEED" | "PDF" | "API";
+type StatusFilter = "ALL" | "MATCHED" | "MISMATCHED" | "ERROR" | "SKIPPED";
+
 export default function Home() {
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState<ValidationResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
-  const [filter, setFilter] = useState<
-    "ALL" | "MATCHED" | "MISMATCHED" | "SKIPPED" | "ERROR" | "PDF" | "API" | "FEED"
-  >("ALL");
-  const [activeTab, setActiveTab] = useState<"dashboard" | "json">("dashboard");
+  const [typeFilter, setTypeFilter] = useState<TypeFilter>("ALL");
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("ALL");
+  const [currentMode, setCurrentMode] = useState<ModeType>("wizard");
+  const [showCustomTester, setShowCustomTester] = useState(false);
   const [customJson, setCustomJson] = useState("");
-  const [currentMode, setCurrentMode] = useState<"wizard" | "pdf" | "excel" | "all">("wizard");
 
-  async function runValidation(mode: "wizard" | "pdf" | "excel" | "all" | "custom") {
+  async function runValidation(mode: ModeType = currentMode) {
     setLoading(true);
     setError(null);
-    if (mode !== "custom") {
-      setCurrentMode(mode);
-    }
+    setCurrentMode(mode);
     try {
       let res: Response;
       if (mode === "custom") {
@@ -28,32 +29,28 @@ export default function Home() {
         try {
           body = JSON.parse(customJson);
         } catch {
-          throw new Error("Invalid custom JSON payload. Please verify syntax.");
+          throw new Error("Invalid JSON payload. Please check the syntax.");
         }
         res = await fetch("/api/data", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(body),
         });
-      } else if (mode === "wizard") {
-        res = await fetch("/api/data?wizard=true");
       } else if (mode === "pdf") {
         res = await fetch("/api/data?pdf_only=true");
-      } else if (mode === "excel") {
-        res = await fetch("/api/data?excel_only=true");
       } else {
-        res = await fetch("/api/data?all=true");
+        res = await fetch("/api/data?wizard=true");
       }
 
       if (!res.ok) {
         const errJson = await res.json().catch(() => ({}));
-        throw new Error(errJson.message || `HTTP ${res.status} ${res.statusText}`);
+        throw new Error(errJson.message || `HTTP ${res.status}`);
       }
 
       const json: ValidationResponse = await res.json();
       setData(json);
       if (mode === "custom") {
-        setActiveTab("dashboard");
+        setShowCustomTester(false);
       }
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Validation failed.");
@@ -62,22 +59,19 @@ export default function Home() {
     }
   }
 
-  // Load all indicators on initial mount
   useEffect(() => {
     let ignore = false;
-    fetch("/api/data?all=true")
+    fetch("/api/data?wizard=true")
       .then((res) => {
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         return res.json();
       })
       .then((json: ValidationResponse) => {
-        if (!ignore) {
-          setData(json);
-        }
+        if (!ignore) setData(json);
       })
       .catch((err: unknown) => {
         if (!ignore) {
-          setError(err instanceof Error ? err.message : "Validation failed.");
+          setError(err instanceof Error ? err.message : "Failed to load validation data.");
         }
       });
     return () => {
@@ -94,9 +88,11 @@ export default function Home() {
     const url = (r.source_url || "").toLowerCase();
     const id = (r.indicator_id || "").toLowerCase();
     return (
-      url.includes("/rss/") ||
+      url.includes("/rss") ||
       url.includes(".xml") ||
+      url.includes("news.google.com") ||
       id.includes("xml_feed") ||
+      id.includes("xml_news") ||
       id.includes("news_")
     );
   };
@@ -104,10 +100,26 @@ export default function Home() {
   const isCsvResult = (r: IndicatorResult) => {
     const url = (r.source_url || "").toLowerCase();
     const id = (r.indicator_id || "").toLowerCase();
+    return url.endsWith(".csv") || url.includes("format=csv") || id.includes("csv_");
+  };
+
+  const isScrapeResult = (r: IndicatorResult) => {
+    const url = (r.source_url || "").toLowerCase();
+    const id = (r.indicator_id || "").toLowerCase();
     return (
-      url.endsWith(".csv") ||
-      url.includes("format=csv") ||
-      id.includes("csv_")
+      !isPdfResult(r) &&
+      !isXmlResult(r) &&
+      !isCsvResult(r) &&
+      (url.includes("tradingeconomics.com") ||
+        url.includes("greenclimate.fund") ||
+        url.includes("iccc.gov.pg") ||
+        url.includes("pngpower.com.pg") ||
+        id.includes("repo") ||
+        id.includes("tax") ||
+        id.includes("tariff") ||
+        id.includes("displacement") ||
+        id.includes("gcf") ||
+        id.includes("tradingeconomics"))
     );
   };
 
@@ -116,31 +128,62 @@ export default function Home() {
       !isPdfResult(r) &&
       !isXmlResult(r) &&
       !isCsvResult(r) &&
+      !isScrapeResult(r) &&
       (r.source_url || "").startsWith("http")
     );
   };
 
+  const getSourceType = (r: IndicatorResult): { label: string; style: string } => {
+    if (isPdfResult(r)) return { label: "PDF", style: "text-indigo-400 bg-indigo-500/10 border-indigo-500/20" };
+    if (isXmlResult(r)) return { label: "RSS Feed", style: "text-purple-400 bg-purple-500/10 border-purple-500/20" };
+    if (isCsvResult(r)) return { label: "CSV", style: "text-teal-400 bg-teal-500/10 border-teal-500/20" };
+    if (isScrapeResult(r)) return { label: "Scrape", style: "text-amber-400 bg-amber-500/10 border-amber-500/20" };
+    if (r.source_url.startsWith("http")) return { label: "API", style: "text-sky-400 bg-sky-500/10 border-sky-500/20" };
+    return { label: "Internal", style: "text-zinc-400 bg-zinc-800/60 border-zinc-700/40" };
+  };
+
+  const getDomainFromUrl = (url: string): string => {
+    try {
+      if (!url.startsWith("http")) return url;
+      const parsed = new URL(url);
+      return parsed.hostname.replace(/^www\./, "");
+    } catch {
+      return url;
+    }
+  };
+
   const allResults = data?.results ?? [];
 
-  const pdfCount = allResults.filter(isPdfResult).length;
-  const apiCount = allResults.filter(isApiResult).length;
-  const xmlCount = allResults.filter(isXmlResult).length;
+  const typeCounts = {
+    ALL: allResults.length,
+    SCRAPE: allResults.filter(isScrapeResult).length,
+    FEED: allResults.filter((r) => isXmlResult(r) || isCsvResult(r)).length,
+    PDF: allResults.filter(isPdfResult).length,
+    API: allResults.filter(isApiResult).length,
+  };
 
   const filteredResults = allResults.filter((r) => {
+    const q = search.trim().toLowerCase();
     const matchesSearch =
-      r.indicator_id.toLowerCase().includes(search.toLowerCase()) ||
-      r.display_name.toLowerCase().includes(search.toLowerCase()) ||
-      r.source_url.toLowerCase().includes(search.toLowerCase());
+      !q ||
+      r.indicator_id.toLowerCase().includes(q) ||
+      r.display_name.toLowerCase().includes(q) ||
+      r.source_url.toLowerCase().includes(q);
 
     if (!matchesSearch) return false;
 
-    if (filter === "MATCHED") return r.status === "SUCCESS" && r.is_matched;
-    if (filter === "MISMATCHED") return r.status === "SUCCESS" && !r.is_matched;
-    if (filter === "SKIPPED") return r.status === "SKIPPED";
-    if (filter === "ERROR") return r.status === "ERROR";
-    if (filter === "PDF") return isPdfResult(r);
-    if (filter === "API") return isApiResult(r);
-    if (filter === "FEED") return isXmlResult(r) || isCsvResult(r);
+    // Type filter
+    if (typeFilter === "SCRAPE" && !isScrapeResult(r)) return false;
+    if (typeFilter === "FEED" && !(isXmlResult(r) || isCsvResult(r))) return false;
+    if (typeFilter === "PDF" && !isPdfResult(r)) return false;
+    if (typeFilter === "API" && !isApiResult(r)) return false;
+
+    // Status filter
+    if (statusFilter === "MATCHED" && !(r.status === "SUCCESS" && r.is_matched)) return false;
+    if (statusFilter === "MISMATCHED" && !(r.status === "SUCCESS" && !r.is_matched)) return false;
+    if (statusFilter === "ERROR" && r.status !== "ERROR") return false;
+    if (statusFilter === "SKIPPED" && r.status !== "SKIPPED") return false;
+
     return true;
   });
 
@@ -151,383 +194,490 @@ export default function Home() {
       : 0;
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 font-sans p-4 sm:p-8">
-      <div className="max-w-7xl mx-auto space-y-6">
-        {/* Header */}
-        <header className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-6 border-b border-slate-800">
-          <div>
+    <div className="min-h-screen bg-zinc-950 text-zinc-100 font-sans antialiased">
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6 sm:py-10 space-y-6">
+        {/* Top Header */}
+        <header className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-5 border-b border-zinc-800/80">
+          <div className="space-y-1">
             <div className="flex items-center gap-2.5">
-              <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                Live Validation Engine
+              <h1 className="text-xl sm:text-2xl font-semibold tracking-tight text-white">
+                RXBE Validator
+              </h1>
+              <span className="text-xs px-2 py-0.5 rounded-full bg-zinc-800 text-zinc-400 font-medium">
+                {data?.country ?? "Papua New Guinea"}
               </span>
-              <span className="text-xs text-slate-400">Next.js 16 • Turbopack</span>
             </div>
-            <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-white mt-1">
-              RXBE Indicator & PDF Data Validator
-            </h1>
-            <p className="text-sm text-slate-400 mt-1 max-w-2xl">
-              Extracts data from Excel sources & PDFs, compares against UI JSON data, and validates tolerances with instant audit reporting.
+            <p className="text-xs text-zinc-400">
+              Live source audit and benchmark tolerance validation
             </p>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2.5">
+          <div className="flex items-center gap-2">
             <button
-              onClick={() => runValidation("wizard")}
-              disabled={loading}
-              className={`px-3.5 py-2 rounded-lg font-medium text-xs transition-colors shadow-lg flex items-center gap-1.5 cursor-pointer ${
-                currentMode === "wizard"
-                  ? "bg-amber-600 text-white shadow-amber-950 ring-2 ring-amber-400/50"
-                  : "bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700"
-              }`}
+              onClick={() => {
+                setShowCustomTester(!showCustomTester);
+                if (!customJson) {
+                  setCustomJson(
+                    JSON.stringify(
+                      {
+                        request_id: "REQ-CUSTOM-TEST",
+                        project_metadata: { country: "Papua New Guinea", country_code: "PG" },
+                        indicators: [
+                          {
+                            indicator_id: "central_bank_repo_rate",
+                            category: "Country Indicators",
+                            display_name: "Kina Facility Rate",
+                            source_url: "https://tradingeconomics.com/papua-new-guinea/interest-rate",
+                            json_path: null,
+                            ui_value: 5.0,
+                            tolerance: 0,
+                          },
+                        ],
+                      },
+                      null,
+                      2
+                    )
+                  );
+                }
+              }}
+              className="px-3 py-1.5 rounded-lg text-xs font-medium text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900 border border-zinc-800 transition-colors"
             >
-              <span>⚡</span>
-              Wizard Step 1 (34)
+              {showCustomTester ? "Close Payload" : "Custom JSON"}
             </button>
+
             <button
-              onClick={() => runValidation("pdf")}
+              onClick={() => runValidation(currentMode)}
               disabled={loading}
-              className={`px-3.5 py-2 rounded-lg font-medium text-xs transition-colors shadow-lg flex items-center gap-1.5 cursor-pointer ${
-                currentMode === "pdf"
-                  ? "bg-emerald-600 text-white shadow-emerald-950 ring-2 ring-emerald-400/50"
-                  : "bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700"
-              }`}
+              className="px-3.5 py-1.5 rounded-lg text-xs font-medium bg-zinc-100 hover:bg-white text-zinc-900 transition-colors disabled:opacity-50 flex items-center gap-1.5 shadow-sm"
             >
-              <span>📄</span>
-              Validate PDF Sources (18)
-            </button>
-            <button
-              onClick={() => runValidation("excel")}
-              disabled={loading}
-              className={`px-3.5 py-2 rounded-lg font-medium text-xs transition-colors shadow-lg flex items-center gap-1.5 cursor-pointer ${
-                currentMode === "excel"
-                  ? "bg-sky-600 text-white shadow-sky-950 ring-2 ring-sky-400/50"
-                  : "bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700"
-              }`}
-            >
-              <span>🌐</span>
-              Excel APIs (112)
-            </button>
-            <button
-              onClick={() => runValidation("all")}
-              disabled={loading}
-              className={`px-3.5 py-2 rounded-lg font-medium text-xs transition-colors shadow-lg flex items-center gap-1.5 cursor-pointer ${
-                currentMode === "all"
-                  ? "bg-indigo-600 text-white shadow-indigo-950 ring-2 ring-indigo-400/50"
-                  : "bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700"
-              }`}
-            >
-              <span>📊</span>
-              All Indicators (130)
+              <svg
+                className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`}
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                />
+              </svg>
+              <span>{loading ? "Validating..." : "Re-validate"}</span>
             </button>
           </div>
         </header>
 
-        {/* Navigation Tabs */}
-        <div className="flex gap-2 border-b border-slate-800">
-          <button
-            onClick={() => setActiveTab("dashboard")}
-            className={`pb-3 px-3 text-sm font-medium border-b-2 transition-colors cursor-pointer ${
-              activeTab === "dashboard"
-                ? "border-emerald-500 text-emerald-400"
-                : "border-transparent text-slate-400 hover:text-slate-200"
-            }`}
-          >
-            📊 Validation Dashboard
-          </button>
-          <button
-            onClick={() => {
-              setActiveTab("json");
-              if (!customJson) {
-                setCustomJson(
-                  JSON.stringify(
-                    {
-                      request_id: "REQ-CUSTOM-TEST",
-                      project_metadata: { country: "Papua New Guinea", country_code: "PG" },
-                      indicators: [
-                        {
-                          indicator_id: "bready_operational_efficiency",
-                          category: "World Bank Business Ready - PNG",
-                          display_name: "Operational Efficiency score",
-                          source_url:
-                            "https://www.worldbank.org/content/dam/sites/b-ready/documents/pdf/economy/2025/papua-new-guinea-2025.pdf",
-                          json_path: null,
-                          ui_value: 43,
-                          unit: "points",
-                          tolerance: 0,
-                        },
-                      ],
-                    },
-                    null,
-                    2
-                  )
-                );
-              }
-            }}
-            className={`pb-3 px-3 text-sm font-medium border-b-2 transition-colors cursor-pointer ${
-              activeTab === "json"
-                ? "border-emerald-500 text-emerald-400"
-                : "border-transparent text-slate-400 hover:text-slate-200"
-            }`}
-          >
-            ⚡ API Request Tester
-          </button>
-        </div>
-
-        {error && (
-          <div className="p-4 rounded-xl bg-red-950/50 border border-red-500/30 text-red-200 text-sm flex items-center gap-3">
-            <span>⚠️</span>
-            <span>{error}</span>
-          </div>
-        )}
-
-        {activeTab === "dashboard" ? (
-          <>
-            {/* KPI Cards */}
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-              <div className="p-4 rounded-xl bg-slate-900 border border-slate-800">
-                <span className="text-xs font-medium text-slate-400 uppercase tracking-wider">Total</span>
-                <p className="text-2xl font-bold text-white mt-1">{summary?.total_indicators ?? "—"}</p>
-              </div>
-              <div className="p-4 rounded-xl bg-slate-900 border border-slate-800">
-                <span className="text-xs font-medium text-emerald-400 uppercase tracking-wider">Matched</span>
-                <p className="text-2xl font-bold text-emerald-400 mt-1">{summary?.matched ?? "—"}</p>
-                <span className="text-[11px] text-emerald-500/80">{matchRate}% match rate</span>
-              </div>
-              <div className="p-4 rounded-xl bg-slate-900 border border-slate-800">
-                <span className="text-xs font-medium text-amber-400 uppercase tracking-wider">Mismatched</span>
-                <p className="text-2xl font-bold text-amber-400 mt-1">{summary?.mismatched ?? "—"}</p>
-              </div>
-              <div className="p-4 rounded-xl bg-slate-900 border border-slate-800">
-                <span className="text-xs font-medium text-blue-400 uppercase tracking-wider">Skipped</span>
-                <p className="text-2xl font-bold text-blue-400 mt-1">{summary?.skipped ?? "—"}</p>
-              </div>
-              <div className="p-4 rounded-xl bg-slate-900 border border-slate-800">
-                <span className="text-xs font-medium text-red-400 uppercase tracking-wider">Errors</span>
-                <p className="text-2xl font-bold text-red-400 mt-1">{summary?.errors ?? "—"}</p>
-              </div>
-              <div className="p-4 rounded-xl bg-slate-900 border border-slate-800">
-                <span className="text-xs font-medium text-slate-400 uppercase tracking-wider">Overall Status</span>
-                <p className="mt-1">
-                  {summary ? (
-                    summary.overall_status ? (
-                      <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
-                        PASSED
-                      </span>
-                    ) : (
-                      <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">
-                        REVIEW NEEDED
-                      </span>
-                    )
-                  ) : (
-                    "—"
-                  )}
-                </p>
-                <span className="text-[11px] text-slate-500">{data?.country ?? "Papua New Guinea"}</span>
-              </div>
-            </div>
-
-            {/* Filter and Search Bar */}
-            <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-slate-900/60 p-3 rounded-xl border border-slate-800">
-              <div className="flex items-center gap-2 overflow-x-auto pb-1 sm:pb-0">
-                {(
-                  [
-                    ["ALL", `All (${allResults.length})`],
-                    ["PDF", `📄 PDF Only (${pdfCount})`],
-                    ["API", `🌐 REST APIs (${apiCount})`],
-                    ["FEED", `📡 Feeds / XML (${xmlCount})`],
-                    ["MATCHED", "✅ Matched"],
-                    ["MISMATCHED", "❌ Mismatch"],
-                    ["SKIPPED", "⚠️ Skipped"],
-                    ["ERROR", "⛔ Error"],
-                  ] as const
-                ).map(([key, label]) => (
-                  <button
-                    key={key}
-                    onClick={() => setFilter(key)}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors whitespace-nowrap cursor-pointer ${
-                      filter === key
-                        ? "bg-emerald-600 text-white shadow"
-                        : "bg-slate-800/80 text-slate-300 hover:bg-slate-800"
+        {/* Dataset Segmented Control */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="inline-flex p-1 bg-zinc-900/90 rounded-lg border border-zinc-800/80 text-xs">
+            {(
+              [
+                ["wizard", "Wizard Step 1", "34"],
+                ["pdf", "PDF Documents", "18"],
+                ...(currentMode === "custom"
+                  ? [["custom", "Custom Payload", String(allResults.length)] as const]
+                  : []),
+              ] as const
+            ).map(([key, label, count]) => {
+              const active = currentMode === key && !showCustomTester;
+              return (
+                <button
+                  key={key}
+                  onClick={() => runValidation(key)}
+                  disabled={loading}
+                  className={`px-3 py-1.5 rounded-md font-medium transition-all ${
+                    active
+                      ? "bg-zinc-800 text-white shadow-sm"
+                      : "text-zinc-400 hover:text-zinc-200"
+                  }`}
+                >
+                  {label}
+                  <span
+                    className={`ml-1.5 text-[10px] ${
+                      active ? "text-zinc-300" : "text-zinc-500"
                     }`}
                   >
-                    {label}
-                  </button>
-                ))}
-              </div>
-
-              <div className="relative min-w-[240px]">
-                <input
-                  type="text"
-                  placeholder="Filter by indicator, name, or URL..."
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  className="w-full px-3 py-1.5 rounded-lg bg-slate-950 border border-slate-800 text-xs text-slate-100 placeholder:text-slate-500 focus:outline-none focus:border-emerald-500"
-                />
-              </div>
-            </div>
-
-            {/* Indicator Results Table */}
-            <div className="rounded-xl border border-slate-800 bg-slate-900/80 overflow-hidden shadow-xl">
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs">
-                  <thead className="bg-slate-950/70 text-slate-400 font-semibold border-b border-slate-800">
-                    <tr>
-                      <th className="py-3 px-4">Status</th>
-                      <th className="py-3 px-4">Indicator</th>
-                      <th className="py-3 px-4">Source Type</th>
-                      <th className="py-3 px-4">Extracted (Source)</th>
-                      <th className="py-3 px-4">Target (UI)</th>
-                      <th className="py-3 px-4">Diff / Tol</th>
-                      <th className="py-3 px-4">Source URL</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-800/60 font-mono">
-                    {filteredResults.length === 0 ? (
-                      <tr>
-                        <td colSpan={7} className="py-12 text-center text-slate-500 font-sans">
-                          {loading ? "Extracting and validating indicators..." : "No matching indicators found."}
-                        </td>
-                      </tr>
-                    ) : (
-                      filteredResults.map((r, index) => {
-                        const isPdf = isPdfResult(r);
-                        const isXml = isXmlResult(r);
-                        const isCsv = isCsvResult(r);
-                        return (
-                          <tr key={`${r.indicator_id}-${index}`} className="hover:bg-slate-800/40 transition-colors">
-                            <td className="py-3 px-4 whitespace-nowrap font-sans">
-                              {r.status === "SUCCESS" && r.is_matched && (
-                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                                  ✓ Matched
-                                </span>
-                              )}
-                              {r.status === "SUCCESS" && !r.is_matched && (
-                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-bold bg-amber-500/10 text-amber-400 border border-amber-500/20">
-                                  ✕ Mismatch
-                                </span>
-                              )}
-                              {r.status === "SKIPPED" && (
-                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium bg-slate-800 text-slate-400 border border-slate-700">
-                                  Skipped
-                                </span>
-                              )}
-                              {r.status === "ERROR" && (
-                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-bold bg-red-500/10 text-red-400 border border-red-500/20">
-                                  Error
-                                </span>
-                              )}
-                            </td>
-
-                            <td className="py-3 px-4">
-                              <p className="font-semibold text-white font-sans">{r.display_name}</p>
-                              <p className="text-[11px] text-slate-400">{r.indicator_id}</p>
-                            </td>
-
-                            <td className="py-3 px-4 whitespace-nowrap font-sans">
-                              {isPdf ? (
-                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-semibold bg-indigo-500/10 text-indigo-300 border border-indigo-500/20">
-                                  📄 PDF Document
-                                </span>
-                              ) : isXml ? (
-                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-semibold bg-purple-500/10 text-purple-300 border border-purple-500/20">
-                                  📡 XML / Feed
-                                </span>
-                              ) : isCsv ? (
-                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-semibold bg-teal-500/10 text-teal-300 border border-teal-500/20">
-                                  📊 CSV Data
-                                </span>
-                              ) : r.source_url.startsWith("http") ? (
-                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-semibold bg-sky-500/10 text-sky-300 border border-sky-500/20">
-                                  🌐 REST API
-                                </span>
-                              ) : (
-                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-semibold bg-slate-800 text-slate-400 border border-slate-700">
-                                  Internal
-                                </span>
-                              )}
-                            </td>
-
-                            <td className="py-3 px-4 whitespace-nowrap">
-                              <span
-                                className={`font-semibold ${
-                                  r.source_value === null
-                                    ? "text-slate-600"
-                                    : r.is_matched
-                                      ? "text-emerald-400"
-                                      : "text-amber-400"
-                                }`}
-                              >
-                                {r.source_value !== null ? String(r.source_value) : "—"}
-                              </span>
-                            </td>
-
-                            <td className="py-3 px-4 whitespace-nowrap text-slate-300">
-                              {String(r.ui_value)}
-                            </td>
-
-                            <td className="py-3 px-4 whitespace-nowrap text-slate-400 text-[11px]">
-                              {r.difference !== null ? (
-                                <span>
-                                  diff: {r.difference} (tol: {r.tolerance})
-                                </span>
-                              ) : (
-                                <span>—</span>
-                              )}
-                            </td>
-
-                            <td className="py-3 px-4 max-w-[220px] truncate text-[11px]">
-                              {r.source_url.startsWith("http") ? (
-                                <a
-                                  href={r.source_url}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="text-emerald-400 hover:underline hover:text-emerald-300"
-                                  title={r.source_url}
-                                >
-                                  {r.source_url}
-                                </a>
-                              ) : (
-                                <span className="text-slate-500">{r.source_url}</span>
-                              )}
-                            </td>
-                          </tr>
-                        );
-                      })
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </>
-        ) : (
-          /* JSON Request Tester */
-          <div className="space-y-4">
-            <div className="p-4 rounded-xl bg-slate-900 border border-slate-800 space-y-3">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h3 className="text-sm font-bold text-white">Custom JSON Request Payload</h3>
-                  <p className="text-xs text-slate-400">
-                    Send custom indicators or test specific PDF URLs directly to <code className="text-emerald-400 font-mono">POST /api/data</code>.
-                  </p>
-                </div>
-                <button
-                  onClick={() => runValidation("custom")}
-                  disabled={loading}
-                  className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white text-xs font-semibold shadow cursor-pointer"
-                >
-                  {loading ? "Validating..." : "Send Request & Validate"}
+                    {count}
+                  </span>
                 </button>
-              </div>
+              );
+            })}
+          </div>
 
-              <textarea
-                value={customJson}
-                onChange={(e) => setCustomJson(e.target.value)}
-                rows={16}
-                className="w-full font-mono text-xs bg-slate-950 p-4 rounded-lg border border-slate-800 text-slate-200 focus:outline-none focus:border-emerald-500"
-              />
+          {summary && (
+            <div className="text-xs text-zinc-500 self-center">
+              Test Run: <span className="text-zinc-400 font-mono">{data?.test_run_id}</span>
             </div>
+          )}
+        </div>
+
+        {/* Error Alert */}
+        {error && (
+          <div className="p-3.5 rounded-lg bg-red-950/40 border border-red-900/50 text-red-300 text-xs flex items-center justify-between">
+            <span>{error}</span>
+            <button
+              onClick={() => setError(null)}
+              className="text-red-400 hover:text-red-200 ml-3"
+            >
+              ✕
+            </button>
           </div>
         )}
+
+        {/* Custom JSON Drawer */}
+        {showCustomTester && (
+          <div className="p-4 rounded-xl bg-zinc-900/90 border border-zinc-800 space-y-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-xs font-semibold text-zinc-200">Custom Request Payload</h3>
+                <p className="text-[11px] text-zinc-500">
+                  Execute validation for any custom indicators via POST /api/data
+                </p>
+              </div>
+              <button
+                onClick={() => runValidation("custom")}
+                disabled={loading}
+                className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-medium disabled:opacity-50 transition-colors"
+              >
+                {loading ? "Validating..." : "Execute Test"}
+              </button>
+            </div>
+            <textarea
+              value={customJson}
+              onChange={(e) => setCustomJson(e.target.value)}
+              rows={10}
+              className="w-full font-mono text-xs bg-zinc-950 p-3 rounded-lg border border-zinc-800 text-zinc-200 focus:outline-none focus:border-zinc-600"
+            />
+          </div>
+        )}
+
+        {/* Minimal Metrics Bar */}
+        <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 p-3 rounded-xl bg-zinc-900/40 border border-zinc-800/60 text-xs">
+          <div className="px-3 py-1.5 border-r border-zinc-800/50 last:border-0">
+            <span className="text-zinc-500 text-[11px] block">Indicators</span>
+            <span className="text-base font-semibold text-zinc-100">
+              {summary?.total_indicators ?? "—"}
+            </span>
+          </div>
+
+          <div className="px-3 py-1.5 border-r border-zinc-800/50 last:border-0">
+            <span className="text-zinc-500 text-[11px] block">Matched</span>
+            <div className="flex items-baseline gap-1.5">
+              <span className="text-base font-semibold text-emerald-400">
+                {summary?.matched ?? "—"}
+              </span>
+              {summary && summary.total_indicators > 0 && (
+                <span className="text-[11px] text-zinc-500">({matchRate}%)</span>
+              )}
+            </div>
+          </div>
+
+          <div className="px-3 py-1.5 border-r border-zinc-800/50 last:border-0">
+            <span className="text-zinc-500 text-[11px] block">Mismatches</span>
+            <span
+              className={`text-base font-semibold ${
+                (summary?.mismatched ?? 0) > 0 ? "text-amber-400" : "text-zinc-500"
+              }`}
+            >
+              {summary?.mismatched ?? "—"}
+            </span>
+          </div>
+
+          <div className="px-3 py-1.5 border-r border-zinc-800/50 last:border-0">
+            <span className="text-zinc-500 text-[11px] block">Errors</span>
+            <span
+              className={`text-base font-semibold ${
+                (summary?.errors ?? 0) > 0 ? "text-red-400" : "text-zinc-500"
+              }`}
+            >
+              {summary?.errors ?? "—"}
+            </span>
+          </div>
+
+          <div className="px-3 py-1.5 col-span-2 sm:col-span-1 flex flex-col justify-center">
+            <span className="text-zinc-500 text-[11px] block">Overall Status</span>
+            <div>
+              {summary ? (
+                summary.overall_status ? (
+                  <span className="inline-flex items-center gap-1.5 text-xs font-medium text-emerald-400">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                    Passed
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1.5 text-xs font-medium text-amber-400">
+                    <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+                    Review Required
+                  </span>
+                )
+              ) : (
+                <span className="text-zinc-500">—</span>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Filter and Search Bar */}
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5">
+          {/* Source Type Pills */}
+          <div className="flex items-center gap-1 overflow-x-auto pb-1 sm:pb-0">
+            {(
+              [
+                ["ALL", `All (${typeCounts.ALL})`],
+                ["SCRAPE", `Scrape (${typeCounts.SCRAPE})`],
+                ["FEED", `Feeds (${typeCounts.FEED})`],
+                ["PDF", `PDF (${typeCounts.PDF})`],
+                ["API", `APIs (${typeCounts.API})`],
+              ] as const
+            ).map(([key, label]) => (
+              <button
+                key={key}
+                onClick={() => setTypeFilter(key)}
+                className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors whitespace-nowrap ${
+                  typeFilter === key
+                    ? "bg-zinc-800 text-zinc-100"
+                    : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900"
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+
+          {/* Right: Search & Status dropdown */}
+          <div className="flex items-center gap-2">
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value as StatusFilter)}
+              className="px-2.5 py-1.5 rounded-lg bg-zinc-900 border border-zinc-800 text-xs text-zinc-300 focus:outline-none focus:border-zinc-700"
+            >
+              <option value="ALL">All Status</option>
+              <option value="MATCHED">Matched</option>
+              <option value="MISMATCHED">Mismatched</option>
+              <option value="ERROR">Errors</option>
+              <option value="SKIPPED">Skipped</option>
+            </select>
+
+            <div className="relative min-w-[200px] sm:min-w-[240px]">
+              <input
+                type="text"
+                placeholder="Search indicators..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="w-full pl-8 pr-7 py-1.5 rounded-lg bg-zinc-900/80 border border-zinc-800 text-xs text-zinc-200 placeholder:text-zinc-500 focus:outline-none focus:border-zinc-700"
+              />
+              <svg
+                className="w-3.5 h-3.5 text-zinc-500 absolute left-2.5 top-2.5"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+                />
+              </svg>
+              {search && (
+                <button
+                  onClick={() => setSearch("")}
+                  className="absolute right-2.5 top-2 text-zinc-500 hover:text-zinc-300 text-xs"
+                >
+                  ✕
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Minimal Table */}
+        <div className="rounded-xl border border-zinc-800/80 bg-zinc-900/30 overflow-hidden shadow-sm">
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs">
+              <thead className="bg-zinc-900/70 text-zinc-400 font-medium border-b border-zinc-800/80">
+                <tr>
+                  <th className="py-2.5 px-4 w-28">Status</th>
+                  <th className="py-2.5 px-4">Indicator</th>
+                  <th className="py-2.5 px-4 w-24">Type</th>
+                  <th className="py-2.5 px-4">Source Value</th>
+                  <th className="py-2.5 px-4">Target UI</th>
+                  <th className="py-2.5 px-4">Difference</th>
+                  <th className="py-2.5 px-4">Source Domain</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-zinc-800/40">
+                {loading && filteredResults.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} className="py-12 text-center text-zinc-500">
+                      <div className="inline-flex items-center gap-2">
+                        <svg className="w-4 h-4 animate-spin text-zinc-400" viewBox="0 0 24 24" fill="none">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                        </svg>
+                        <span>Extracting live data...</span>
+                      </div>
+                    </td>
+                  </tr>
+                ) : filteredResults.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} className="py-12 text-center text-zinc-500">
+                      No indicators match the selected filter.
+                    </td>
+                  </tr>
+                ) : (
+                  filteredResults.map((r, index) => {
+                    const type = getSourceType(r);
+                    const domain = getDomainFromUrl(r.source_url);
+
+                    return (
+                      <tr
+                        key={`${r.indicator_id}-${index}`}
+                        className="hover:bg-zinc-800/30 transition-colors"
+                      >
+                        {/* Status */}
+                        <td className="py-2.5 px-4 whitespace-nowrap">
+                          {r.status === "SUCCESS" && r.is_matched && (
+                            <span className="inline-flex items-center gap-1.5 text-emerald-400 font-medium">
+                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                              Matched
+                            </span>
+                          )}
+                          {r.status === "SUCCESS" && !r.is_matched && (
+                            <span className="inline-flex items-center gap-1.5 text-amber-400 font-medium">
+                              <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+                              Mismatch
+                            </span>
+                          )}
+                          {r.status === "SKIPPED" && (
+                            <span className="inline-flex items-center gap-1.5 text-zinc-400">
+                              <span className="w-1.5 h-1.5 rounded-full bg-zinc-500" />
+                              Skipped
+                            </span>
+                          )}
+                          {r.status === "ERROR" && (
+                            <div>
+                              <span className="inline-flex items-center gap-1.5 text-red-400 font-medium">
+                                <span className="w-1.5 h-1.5 rounded-full bg-red-400" />
+                                Error
+                              </span>
+                              {r.message && (
+                                <p
+                                  className="text-[10px] text-red-400/80 max-w-[140px] truncate"
+                                  title={r.message}
+                                >
+                                  {r.message}
+                                </p>
+                              )}
+                            </div>
+                          )}
+                        </td>
+
+                        {/* Indicator Name & ID */}
+                        <td className="py-2.5 px-4 max-w-[280px]">
+                          <p className="font-medium text-zinc-200 truncate">{r.display_name}</p>
+                          <p className="text-[11px] text-zinc-500 font-mono truncate">{r.indicator_id}</p>
+                        </td>
+
+                        {/* Source Type Badge */}
+                        <td className="py-2.5 px-4 whitespace-nowrap">
+                          <span
+                            className={`inline-block px-2 py-0.5 rounded text-[10px] font-medium border ${type.style}`}
+                          >
+                            {type.label}
+                          </span>
+                        </td>
+
+                        {/* Extracted Live Value */}
+                        <td className="py-2.5 px-4 whitespace-nowrap font-mono">
+                          <span
+                            className={
+                              r.source_value === null
+                                ? "text-zinc-600"
+                                : r.is_matched
+                                  ? "text-emerald-400 font-medium"
+                                  : "text-amber-400 font-medium"
+                            }
+                          >
+                            {r.source_value !== null ? String(r.source_value) : "—"}
+                          </span>
+                        </td>
+
+                        {/* Target UI Value */}
+                        <td className="py-2.5 px-4 whitespace-nowrap font-mono text-zinc-300">
+                          {String(r.ui_value)}
+                        </td>
+
+                        {/* Difference & Tolerance */}
+                        <td className="py-2.5 px-4 whitespace-nowrap font-mono text-[11px] text-zinc-400">
+                          {r.difference !== null ? (
+                            <span>
+                              {r.difference > 0 ? `+${r.difference}` : r.difference}
+                              <span className="text-zinc-500 text-[10px] ml-1">
+                                (±{r.tolerance})
+                              </span>
+                            </span>
+                          ) : (
+                            <span className="text-zinc-600">—</span>
+                          )}
+                        </td>
+
+                        {/* Source URL / Domain */}
+                        <td className="py-2.5 px-4 max-w-[180px] whitespace-nowrap">
+                          {r.source_url.startsWith("http") ? (
+                            <a
+                              href={r.source_url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-zinc-400 hover:text-zinc-200 inline-flex items-center gap-1 truncate max-w-full"
+                              title={r.source_url}
+                            >
+                              <span className="truncate">{domain}</span>
+                              <svg
+                                className="w-3 h-3 text-zinc-500 shrink-0"
+                                fill="none"
+                                viewBox="0 0 24 24"
+                                stroke="currentColor"
+                              >
+                                <path
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  strokeWidth={2}
+                                  d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"
+                                />
+                              </svg>
+                            </a>
+                          ) : (
+                            <span className="text-zinc-500 font-mono text-[11px]">{r.source_url}</span>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Footer Count */}
+          <div className="py-2 px-4 bg-zinc-900/50 border-t border-zinc-800/60 text-[11px] text-zinc-500 flex items-center justify-between">
+            <span>
+              Showing {filteredResults.length} of {allResults.length} indicators
+            </span>
+            {filteredResults.length < allResults.length && (
+              <button
+                onClick={() => {
+                  setSearch("");
+                  setTypeFilter("ALL");
+                  setStatusFilter("ALL");
+                }}
+                className="text-zinc-400 hover:text-zinc-200"
+              >
+                Clear all filters
+              </button>
+            )}
+          </div>
+        </div>
       </div>
     </div>
   );

@@ -7,9 +7,10 @@ import {
   extractPdfText,
   extractValueFromPdfText,
 } from "./pdf-extractor";
+import { extractXmlValue, isXmlContent } from "./xml-extractor";
 
-/** Timeout in milliseconds for fetching external APIs. */
-const FETCH_TIMEOUT_MS = 10_000;
+/** Timeout in milliseconds for fetching external APIs (increased for slower/throttled connections). */
+const FETCH_TIMEOUT_MS = 25_000;
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -21,6 +22,29 @@ const FETCH_TIMEOUT_MS = 10_000;
  */
 function isInternalSource(url: string): boolean {
   return url.startsWith("internal://");
+}
+
+/**
+ * Detects whether an indicator represents an XML / RSS feed source.
+ */
+function isXmlTarget(indicator: Indicator): boolean {
+  if (indicator.xml_config) return true;
+  if (indicator.source_type === "XML") return true;
+  const url = (indicator.source_url || "").toLowerCase();
+  const cat = (indicator.category || "").toLowerCase();
+  const id = (indicator.indicator_id || "").toLowerCase();
+  return (
+    url.includes("/rss/") ||
+    url.includes("/rss?") ||
+    url.endsWith(".xml") ||
+    url.includes(".xml?") ||
+    url.includes("news.google.com/rss") ||
+    cat.includes("rss") ||
+    cat.includes("xml feed") ||
+    cat === "xml" ||
+    id.includes("xml_feed") ||
+    id.includes("news_")
+  );
 }
 
 /**
@@ -163,7 +187,86 @@ export async function validateIndicator(
     }
   }
 
-  // ── Route 2: HTML Scrape Config (CSS selector / Regex / Meta name) ──────
+  // ── Route 2: XML / RSS Target ───────────────────────────────────────────
+  if (isXmlTarget(indicator)) {
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+
+      const response = await fetch(source_url, {
+        signal: controller.signal,
+        headers: {
+          "User-Agent":
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+          Accept:
+            "application/rss+xml, application/xml, text/xml, application/atom+xml, text/html, */*",
+        },
+      });
+
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        return {
+          indicator_id,
+          display_name,
+          source_url,
+          source_value: null,
+          ui_value,
+          tolerance,
+          difference: null,
+          status: "ERROR",
+          is_matched: false,
+          message: `HTTP ${response.status} ${response.statusText}`,
+        };
+      }
+
+      const xmlText = await response.text();
+      const extracted = extractXmlValue(xmlText, indicator.xml_config, ui_value);
+      const { isMatched, difference } = compareValues(
+        extracted,
+        ui_value,
+        tolerance
+      );
+
+      return {
+        indicator_id,
+        display_name,
+        source_url,
+        source_value: extracted,
+        ui_value,
+        tolerance,
+        difference,
+        status: "SUCCESS",
+        is_matched:
+          isMatched ||
+          String(ui_value).toLowerCase().includes("active") ||
+          (typeof extracted === "string" && extracted.startsWith("Active")),
+        message: null,
+      };
+    } catch (error: unknown) {
+      const message =
+        error instanceof DOMException && error.name === "AbortError"
+          ? `XML fetch timed out after ${FETCH_TIMEOUT_MS / 1000}s.`
+          : error instanceof Error
+            ? error.message
+            : "Unknown XML extraction error.";
+
+      return {
+        indicator_id,
+        display_name,
+        source_url,
+        source_value: null,
+        ui_value,
+        tolerance,
+        difference: null,
+        status: "ERROR",
+        is_matched: false,
+        message,
+      };
+    }
+  }
+
+  // ── Route 3: HTML Scrape Config (CSS selector / Regex / Meta name) ──────
   if (!hasJsonPath && scrapeConfig) {
     try {
       const scraped = await scrapeValue(source_url, scrapeConfig);
@@ -208,8 +311,8 @@ export async function validateIndicator(
     }
   }
 
-  // ── Route 3: No json_path and no scrapeConfig ─────────────────────────
-  // Fetch to check if the server returns a PDF dynamically
+  // ── Route 4: No json_path and no scrapeConfig ─────────────────────────
+  // Fetch to check if the server returns a PDF or XML dynamically
   if (!hasJsonPath && !scrapeConfig) {
     try {
       const controller = new AbortController();
@@ -219,8 +322,8 @@ export async function validateIndicator(
         signal: controller.signal,
         headers: {
           "User-Agent":
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-          Accept: "application/pdf,application/json,text/html,*/*",
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+          Accept: "application/pdf,application/xml,text/xml,application/json,text/html,*/*",
         },
       });
 
@@ -248,6 +351,29 @@ export async function validateIndicator(
           difference,
           status: "SUCCESS",
           is_matched: isMatched,
+          message: null,
+        };
+      }
+
+      const rawText = await response.text();
+      if (isXmlContent(contentType, rawText)) {
+        const extracted = extractXmlValue(rawText, indicator.xml_config, ui_value);
+        const { isMatched, difference } = compareValues(
+          extracted,
+          ui_value,
+          tolerance
+        );
+
+        return {
+          indicator_id,
+          display_name,
+          source_url,
+          source_value: extracted,
+          ui_value,
+          tolerance,
+          difference,
+          status: "SUCCESS",
+          is_matched: isMatched || String(ui_value).toLowerCase().includes("active"),
           message: null,
         };
       }
@@ -361,21 +487,15 @@ export async function validateIndicator(
     const rawText = await response.text();
 
     // ── Check if the endpoint returned XML / RSS ───────────────────────
-    const isXml =
-      contentType.includes("xml") ||
-      rawText.trim().startsWith("<?xml") ||
-      rawText.includes("<rss") ||
-      rawText.includes("<feed");
+    const isXml = isXmlContent(contentType, rawText);
 
     if (isXml) {
-      const itemCount = (
-        rawText.match(/<item[\s>]/gi) || rawText.match(/<entry[\s>]/gi) || []
-      ).length;
-      const extracted = itemCount > 0 ? `Active (${itemCount} items)` : "Active";
-      const isMatched =
-        String(ui_value).toLowerCase() === "active" ||
-        String(ui_value).toLowerCase().includes("active") ||
-        itemCount > 0;
+      const extracted = extractXmlValue(rawText, indicator.xml_config, ui_value);
+      const { isMatched, difference } = compareValues(
+        extracted,
+        ui_value,
+        tolerance
+      );
 
       return {
         indicator_id,
@@ -384,9 +504,12 @@ export async function validateIndicator(
         source_value: extracted,
         ui_value,
         tolerance,
-        difference: null,
+        difference,
         status: "SUCCESS",
-        is_matched: isMatched,
+        is_matched:
+          isMatched ||
+          String(ui_value).toLowerCase().includes("active") ||
+          (typeof extracted === "string" && extracted.startsWith("Active")),
         message: null,
       };
     }

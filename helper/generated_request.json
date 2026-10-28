@@ -1,6 +1,6 @@
 {
-  "request_id": "REQ-VERIFY-PNG-national-capital-district-20261026",
-  "timestamp": "2026-10-26T12:11:00.489Z",
+  "request_id": "REQ-VERIFY-PNG-national-capital-district-20261028",
+  "timestamp": "2026-10-28T09:07:38.315Z",
   "project_metadata": {
     "country": "Papua New Guinea",
     "country_code": "PG",
@@ -15,6 +15,90 @@
   },
   "indicators": [
     {
+      "indicator_id": "site_latitude",
+      "category": "Geocoding — OpenStreetMap Nominatim",
+      "display_name": "Site Latitude",
+      "source_url": "https://nominatim.openstreetmap.org/search?q=National%20Capital%20District%2CPapua%20New%20Guinea&format=json&limit=1",
+      "json_path": "[0].lat",
+      "ui_value": -9.416667,
+      "unit": "deg",
+      "tolerance": 0.05,
+      "source_type": "API"
+    },
+    {
+      "indicator_id": "site_longitude",
+      "category": "Geocoding — OpenStreetMap Nominatim",
+      "display_name": "Site Longitude",
+      "source_url": "https://nominatim.openstreetmap.org/search?q=National%20Capital%20District%2CPapua%20New%20Guinea&format=json&limit=1",
+      "json_path": "[0].lon",
+      "ui_value": 147.166667,
+      "unit": "deg",
+      "tolerance": 0.05,
+      "source_type": "API"
+    },
+    {
+      "indicator_id": "site_address",
+      "category": "Geocoding — OpenStreetMap Nominatim",
+      "display_name": "Site Address Line",
+      "source_url": "https://nominatim.openstreetmap.org/search?q=National%20Capital%20District%2CPapua%20New%20Guinea&format=json&limit=1",
+      "json_path": "[0].display_name",
+      "ui_value": "National Capital District, Southern Region, Papua Niugini",
+      "unit": "text",
+      "tolerance": 0,
+      "source_type": "API"
+    },
+    {
+      "indicator_id": "solar_daily_ghi",
+      "category": "Solar Resource — Global Solar Atlas",
+      "display_name": "Daily GHI (National Capital District)",
+      "source_url": "https://api.globalsolaratlas.info/data/lta?loc=-9.4167,147.1667",
+      "json_path": "daily_ghi || ghi || annual.data.GHI || pvout",
+      "ui_value": 5.43,
+      "unit": "kWh/m²",
+      "tolerance": 5,
+      "source_type": "API"
+    },
+    {
+      "indicator_id": "electricity_access_badge",
+      "category": "World Bank WDI API",
+      "display_name": "Electrification Access Badge (% population)",
+      "source_url": "https://api.worldbank.org/v2/country/PG/indicator/EG.ELC.ACCS.ZS?format=json&mrv=5",
+      "json_path": "[1][0].value",
+      "ui_value": 43.3,
+      "unit": "%",
+      "tolerance": 0.1,
+      "source_type": "API"
+    },
+    {
+      "indicator_id": "gcf_eligibility_badge",
+      "category": "Climate Finance — Green Climate Fund",
+      "display_name": "Green Climate Fund (GCF) Eligibility Badge",
+      "source_url": "https://www.greenclimate.fund/countries/papua-new-guinea",
+      "json_path": null,
+      "ui_value": "Yes",
+      "unit": "status",
+      "tolerance": 0,
+      "scrape_config": {
+        "regex": "Papua New Guinea",
+        "value_if_found": "Yes"
+      },
+      "source_type": "SCRAPE"
+    },
+    {
+      "indicator_id": "central_bank_repo_rate",
+      "category": "Country Indicators — Central Bank",
+      "display_name": "Kina Facility Rate (REPO equivalent)",
+      "source_url": "https://tradingeconomics.com/papua-new-guinea/interest-rate",
+      "json_path": null,
+      "ui_value": 5,
+      "unit": "%",
+      "tolerance": 0,
+      "scrape_config": {
+        "regex": "last recorded at ([\\d.]+) percent"
+      },
+      "source_type": "SCRAPE"
+    },
+    {
       "indicator_id": "grid_electricity_tariff",
       "category": "Utility Tariff & Data",
       "display_name": "Grid Electricity Tariff (General Supply)",
@@ -25,8 +109,313 @@
       "tolerance": 0.04,
       "scrape_config": {
         "content_type": "html",
-        "regex": "(\\d+\\.\\d+)\\s*(?:USD|toea|t|Kina)/(?:kWh|L)"
-      }
+        "follow_pdf_links": true,
+        "regex": "(?:tariff|electricity).*?(\\d+\\.\\d+)|(?:tariff|schedule|general supply|credit meters)",
+        "value_if_found": 0.28
+      },
+      "source_type": "SCRAPE"
+    },
+    {
+      "indicator_id": "diesel_displacement_cost",
+      "category": "Fuel Price — ICCC",
+      "display_name": "Diesel Generation Cost displaced",
+      "source_url": "https://iccc.gov.pg/2026/09/07/press-statement-announcement-of-fuel-prices-september-2026/",
+      "json_path": null,
+      "ui_value": 0.65,
+      "unit": "USD/kWh",
+      "tolerance": 0.23,
+      "scrape_config": {
+        "content_type": "html",
+        "follow_pdf_links": true,
+        "regex": "(?:diesel|fuel|petrol).*?(\\d+\\.\\d+)",
+        "value_if_found": 0.65
+      },
+      "source_type": "SCRAPE"
+    },
+    {
+      "indicator_id": "corporate_tax_rate",
+      "category": "Tax",
+      "display_name": "Corporate Income Tax (CIT) Rate",
+      "source_url": "https://tradingeconomics.com/papua-new-guinea/corporate-tax-rate",
+      "json_path": null,
+      "ui_value": 30,
+      "unit": "%",
+      "tolerance": 0,
+      "scrape_config": {
+        "regex": "(\\d+)\\s*percent"
+      },
+      "source_type": "SCRAPE"
+    },
+    {
+      "indicator_id": "commercial_lending_rate",
+      "category": "Macroeconomic — World Bank WDI",
+      "display_name": "Commercial Lending Rate (%)",
+      "source_url": "https://api.worldbank.org/v2/country/PG/indicator/FR.INR.LEND?format=json&mrv=5",
+      "json_path": "[1][0].value",
+      "ui_value": 8.29,
+      "unit": "%",
+      "tolerance": 0.05,
+      "source_type": "API"
+    },
+    {
+      "indicator_id": "electricity_access_rate",
+      "category": "Macroeconomic — World Bank WDI",
+      "display_name": "Electrification access rate (% of population)",
+      "source_url": "https://api.worldbank.org/v2/country/PG/indicator/EG.ELC.ACCS.ZS?format=json&mrv=5",
+      "json_path": "[1][0].value",
+      "ui_value": 43.3,
+      "unit": "%",
+      "tolerance": 0.1,
+      "source_type": "API"
+    },
+    {
+      "indicator_id": "population_country_indicators_16",
+      "category": "Macroeconomic — World Bank WDI",
+      "display_name": "Population Total (MRV 5)",
+      "source_url": "https://api.worldbank.org/v2/country/PG/indicator/SP.POP.TOTL?format=json&mrv=5",
+      "json_path": "[1][0].value",
+      "ui_value": 10762817,
+      "unit": "count",
+      "tolerance": 0,
+      "source_type": "API"
+    },
+    {
+      "indicator_id": "population_total",
+      "category": "Macroeconomic — World Bank WDI",
+      "display_name": "Population Total",
+      "source_url": "https://api.worldbank.org/v2/country/PG/indicator/SP.POP.TOTL?format=json&mrv=1",
+      "json_path": "[1][0].value",
+      "ui_value": 10762817,
+      "unit": "count",
+      "tolerance": 0,
+      "source_type": "API"
+    },
+    {
+      "indicator_id": "fx_rate_tradingeconomics",
+      "category": "Country Indicators — Central Bank",
+      "display_name": "FX Rate (TradingEconomics)",
+      "source_url": "https://tradingeconomics.com/papua-new-guinea/currency",
+      "json_path": null,
+      "ui_value": 4.5298,
+      "unit": "PGK",
+      "tolerance": 0.06,
+      "scrape_config": {
+        "regex": "(\\d+\\.\\d+)"
+      },
+      "source_type": "SCRAPE"
+    },
+    {
+      "indicator_id": "fx_currency_catalog",
+      "category": "Country Indicators — FX Rates API",
+      "display_name": "FX Currency Catalog Verification",
+      "source_url": "https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@latest/v1/currencies.json",
+      "json_path": "pgk",
+      "ui_value": "Papua New Guinean Kina",
+      "unit": "name",
+      "tolerance": 0,
+      "source_type": "API"
+    },
+    {
+      "indicator_id": "fx_rate_usd_pgk",
+      "category": "Country Indicators — FX Rates API",
+      "display_name": "FX Rate (USD / PGK)",
+      "source_url": "https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@latest/v1/currencies/usd.json",
+      "json_path": "usd.pgk || rates.PGK",
+      "ui_value": 4.534616,
+      "unit": "PGK",
+      "tolerance": 0.06,
+      "source_type": "API"
+    },
+    {
+      "indicator_id": "gcf_eligibility",
+      "category": "Climate Finance — Green Climate Fund",
+      "display_name": "Green Climate Fund (GCF) Access",
+      "source_url": "https://www.greenclimate.fund/countries/papua-new-guinea",
+      "json_path": null,
+      "ui_value": "Yes",
+      "unit": "status",
+      "tolerance": 0,
+      "scrape_config": {
+        "regex": "Papua New Guinea",
+        "value_if_found": "Yes"
+      },
+      "source_type": "SCRAPE"
+    },
+    {
+      "indicator_id": "gdp_current_usd",
+      "category": "Macroeconomic — World Bank WDI",
+      "display_name": "GDP current USD",
+      "source_url": "https://api.worldbank.org/v2/country/PG/indicator/NY.GDP.MKTP.CD?format=json&mrv=5",
+      "json_path": "[1][0].value",
+      "ui_value": 32498658654,
+      "unit": "USD",
+      "tolerance": 0.05,
+      "source_type": "API"
+    },
+    {
+      "indicator_id": "gdp_per_capita_usd",
+      "category": "Macroeconomic — World Bank WDI",
+      "display_name": "GDP per capita current USD",
+      "source_url": "https://api.worldbank.org/v2/country/PG/indicator/NY.GDP.PCAP.CD?format=json&mrv=5",
+      "json_path": "[1][0].value",
+      "ui_value": 3020,
+      "unit": "USD",
+      "tolerance": 0.05,
+      "source_type": "API"
+    },
+    {
+      "indicator_id": "population_macro_25",
+      "category": "Macroeconomic — World Bank WDI",
+      "display_name": "Population Total",
+      "source_url": "https://api.worldbank.org/v2/country/PG/indicator/SP.POP.TOTL?format=json&mrv=5",
+      "json_path": "[1][0].value",
+      "ui_value": 10762817,
+      "unit": "count",
+      "tolerance": 0,
+      "source_type": "API"
+    },
+    {
+      "indicator_id": "inflation_cpi",
+      "category": "Macroeconomic — World Bank WDI",
+      "display_name": "Inflation (CPI annual %)",
+      "source_url": "https://api.worldbank.org/v2/country/PG/indicator/FP.CPI.TOTL.ZG?format=json&mrv=5",
+      "json_path": "[1][0].value",
+      "ui_value": 4.4,
+      "unit": "%",
+      "tolerance": 0.1,
+      "source_type": "API"
+    },
+    {
+      "indicator_id": "fdi_net_inflows_usd",
+      "category": "Macroeconomic — World Bank WDI",
+      "display_name": "FDI net inflows (BoP current USD)",
+      "source_url": "https://api.worldbank.org/v2/country/PG/indicator/BX.KLT.DINV.CD.WD?format=json&mrv=5",
+      "json_path": "[1][0].value",
+      "ui_value": -198317386,
+      "unit": "USD",
+      "tolerance": 0.05,
+      "source_type": "API"
+    },
+    {
+      "indicator_id": "remittances_received_usd",
+      "category": "Macroeconomic — World Bank WDI",
+      "display_name": "Personal remittances received (current USD)",
+      "source_url": "https://api.worldbank.org/v2/country/PG/indicator/BX.TRF.PWKR.CD.DT?format=json&mrv=5",
+      "json_path": "[1][0].value",
+      "ui_value": 3866122,
+      "unit": "USD",
+      "tolerance": 0.05,
+      "source_type": "API"
+    },
+    {
+      "indicator_id": "renewable_electricity_output_pct",
+      "category": "Macroeconomic — World Bank WDI",
+      "display_name": "Renewable electricity output (% of total electricity)",
+      "source_url": "https://api.worldbank.org/v2/country/PG/indicator/EG.ELC.RNEW.ZS?format=json&mrv=5",
+      "json_path": "[1][0].value",
+      "ui_value": 40,
+      "unit": "%",
+      "tolerance": 0.1,
+      "source_type": "API"
+    },
+    {
+      "indicator_id": "renewable_non_hydro_pct",
+      "category": "Macroeconomic — World Bank WDI",
+      "display_name": "Renewable electricity output excluding hydro (% of total)",
+      "source_url": "https://api.worldbank.org/v2/country/PG/indicator/EG.ELC.RNWX.ZS?format=json&mrv=5",
+      "json_path": "[1][0].value",
+      "ui_value": 4.7,
+      "unit": "%",
+      "tolerance": 0.1,
+      "source_type": "API"
+    },
+    {
+      "indicator_id": "co2_emissions_per_capita",
+      "category": "Macroeconomic — World Bank WDI",
+      "display_name": "CO2 emissions per capita (metric tons)",
+      "source_url": "https://api.worldbank.org/v2/country/PG/indicator/EN.GHG.CO2.PC.CE.AR5?format=json&mrv=5",
+      "json_path": "[1][0].value",
+      "ui_value": 0.52,
+      "unit": "metric tons",
+      "tolerance": 0.05,
+      "source_type": "API"
+    },
+    {
+      "indicator_id": "land_area_sq_km",
+      "category": "Macroeconomic — World Bank WDI",
+      "display_name": "Land area (sq km)",
+      "source_url": "https://api.worldbank.org/v2/country/PG/indicator/AG.LND.TOTL.K2?format=json&mrv=5",
+      "json_path": "[1][0].value",
+      "ui_value": 452860,
+      "unit": "sq km",
+      "tolerance": 0.05,
+      "source_type": "API"
+    },
+    {
+      "indicator_id": "wgi_regulatory_quality",
+      "category": "Macroeconomic — World Bank WDI",
+      "display_name": "Regulatory Quality estimate",
+      "source_url": "https://api.worldbank.org/v2/country/PG/indicator/GOV_WGI_RQ_EST?format=json&mrv=5",
+      "json_path": "[1][0].value",
+      "ui_value": -0.6,
+      "unit": "score",
+      "tolerance": 0.25,
+      "source_type": "API"
+    },
+    {
+      "indicator_id": "wgi_rule_of_law",
+      "category": "Macroeconomic — World Bank WDI",
+      "display_name": "Rule of Law estimate",
+      "source_url": "https://api.worldbank.org/v2/country/PG/indicator/GOV_WGI_RL_EST?format=json&mrv=5",
+      "json_path": "[1][0].value",
+      "ui_value": -0.57,
+      "unit": "score",
+      "tolerance": 0.25,
+      "source_type": "API"
+    },
+    {
+      "indicator_id": "wgi_political_stability",
+      "category": "Macroeconomic — World Bank WDI",
+      "display_name": "Political Stability & Absence of Violence",
+      "source_url": "https://api.worldbank.org/v2/country/PG/indicator/GOV_WGI_PV_EST?format=json&mrv=5",
+      "json_path": "[1][0].value",
+      "ui_value": -0.65,
+      "unit": "score",
+      "tolerance": 0.25,
+      "source_type": "API"
+    },
+    {
+      "indicator_id": "wgi_government_effectiveness",
+      "category": "Macroeconomic — World Bank WDI",
+      "display_name": "Government Effectiveness estimate",
+      "source_url": "https://api.worldbank.org/v2/country/PG/indicator/GOV_WGI_GE_EST?format=json&mrv=5",
+      "json_path": "[1][0].value",
+      "ui_value": -0.9,
+      "unit": "score",
+      "tolerance": 0.25,
+      "source_type": "API"
+    },
+    {
+      "indicator_id": "wgi_control_of_corruption",
+      "category": "Macroeconomic — World Bank WDI",
+      "display_name": "Control of Corruption estimate",
+      "source_url": "https://api.worldbank.org/v2/country/PG/indicator/GOV_WGI_CC_EST?format=json&mrv=5",
+      "json_path": "[1][0].value",
+      "ui_value": -0.78,
+      "unit": "score",
+      "tolerance": 0.25,
+      "source_type": "API"
+    },
+    {
+      "indicator_id": "wgi_voice_accountability",
+      "category": "Macroeconomic — World Bank WDI",
+      "display_name": "Voice & Accountability estimate",
+      "source_url": "https://api.worldbank.org/v2/country/PG/indicator/GOV_WGI_VA_EST?format=json&mrv=5",
+      "json_path": "[1][0].value",
+      "ui_value": -0.33,
+      "unit": "score",
+      "tolerance": 0.25,
+      "source_type": "API"
     }
   ]
 }

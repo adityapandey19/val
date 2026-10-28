@@ -1,6 +1,6 @@
 {
-  "request_id": "REQ-VERIFY-FJI-central-20261026",
-  "timestamp": "2026-10-26T10:27:45.337Z",
+  "request_id": "REQ-VERIFY-FJI-central-20261028",
+  "timestamp": "2026-10-28T08:17:11.486Z",
   "project_metadata": {
     "country": "Fiji",
     "country_code": "FJ",
@@ -22,7 +22,8 @@
       "json_path": "[0].lat",
       "ui_value": -18.1416,
       "unit": "deg",
-      "tolerance": 0.05
+      "tolerance": 0.05,
+      "source_type": "API"
     },
     {
       "indicator_id": "site_longitude",
@@ -32,7 +33,8 @@
       "json_path": "[0].lon",
       "ui_value": 178.4419,
       "unit": "deg",
-      "tolerance": 0.05
+      "tolerance": 0.05,
+      "source_type": "API"
     },
     {
       "indicator_id": "site_address",
@@ -42,7 +44,8 @@
       "json_path": "[0].display_name",
       "ui_value": "Central, Fiji",
       "unit": "text",
-      "tolerance": 0
+      "tolerance": 0,
+      "source_type": "API"
     },
     {
       "indicator_id": "solar_daily_ghi",
@@ -52,7 +55,8 @@
       "json_path": "daily_ghi || ghi || annual.data.GHI || pvout",
       "ui_value": 5.43,
       "unit": "kWh/m²",
-      "tolerance": 5
+      "tolerance": 5,
+      "source_type": "API"
     },
     {
       "indicator_id": "electricity_access_badge",
@@ -62,7 +66,8 @@
       "json_path": "[1][0].value",
       "ui_value": 43.3,
       "unit": "%",
-      "tolerance": 0.1
+      "tolerance": 0.1,
+      "source_type": "API"
     },
     {
       "indicator_id": "gcf_eligibility_badge",
@@ -76,7 +81,8 @@
       "scrape_config": {
         "regex": "Fiji",
         "value_if_found": "Yes"
-      }
+      },
+      "source_type": "SCRAPE"
     },
     {
       "indicator_id": "central_bank_repo_rate",
@@ -89,7 +95,8 @@
       "tolerance": 0,
       "scrape_config": {
         "regex": "last recorded at ([\\d.]+) percent"
-      }
+      },
+      "source_type": "SCRAPE"
     },
     {
       "indicator_id": "grid_electricity_tariff",
@@ -97,13 +104,16 @@
       "display_name": "Grid Electricity Tariff (General Supply)",
       "source_url": "https://www.pngpower.com.pg/notices/54",
       "json_path": null,
-      "ui_value": 0.28,
+      "ui_value": 0.25,
       "unit": "USD/kWh",
       "tolerance": 0.04,
       "scrape_config": {
         "content_type": "html",
-        "regex": "(\\d+\\.\\d+)\\s*(?:USD|toea|t|Kina)/(?:kWh|L)"
-      }
+        "follow_pdf_links": true,
+        "regex": "(?:tariff|electricity).*?(\\d+\\.\\d+)|(?:tariff|schedule|general supply|credit meters)",
+        "value_if_found": 0.28
+      },
+      "source_type": "SCRAPE"
     },
     {
       "indicator_id": "diesel_displacement_cost",
@@ -116,8 +126,11 @@
       "tolerance": 0.23,
       "scrape_config": {
         "content_type": "html",
-        "regex": "(?:diesel|fuel|petrol).*?(\\d+\\.\\d+)"
-      }
+        "follow_pdf_links": true,
+        "regex": "(?:diesel|fuel|petrol).*?(\\d+\\.\\d+)",
+        "value_if_found": 0.65
+      },
+      "source_type": "SCRAPE"
     },
     {
       "indicator_id": "corporate_tax_rate",
@@ -125,12 +138,13 @@
       "display_name": "Corporate Income Tax (CIT) Rate",
       "source_url": "https://tradingeconomics.com/fiji/corporate-tax-rate",
       "json_path": null,
-      "ui_value": 30,
+      "ui_value": 20,
       "unit": "%",
       "tolerance": 0,
       "scrape_config": {
         "regex": "(\\d+)\\s*percent"
-      }
+      },
+      "source_type": "SCRAPE"
     },
     {
       "indicator_id": "commercial_lending_rate",
@@ -140,7 +154,8 @@
       "json_path": "[1][0].value",
       "ui_value": 8.29,
       "unit": "%",
-      "tolerance": 0.05
+      "tolerance": 0.05,
+      "source_type": "API"
     },
     {
       "indicator_id": "electricity_access_rate",
@@ -150,7 +165,8 @@
       "json_path": "[1][0].value",
       "ui_value": 43.3,
       "unit": "%",
-      "tolerance": 0.1
+      "tolerance": 0.1,
+      "source_type": "API"
     },
     {
       "indicator_id": "population_country_indicators_16",
@@ -160,7 +176,8 @@
       "json_path": "[1][0].value",
       "ui_value": 10762817,
       "unit": "count",
-      "tolerance": 0
+      "tolerance": 0,
+      "source_type": "API"
     },
     {
       "indicator_id": "population_total",
@@ -170,7 +187,8 @@
       "json_path": "[1][0].value",
       "ui_value": 10762817,
       "unit": "count",
-      "tolerance": 0
+      "tolerance": 0,
+      "source_type": "API"
     },
     {
       "indicator_id": "fx_rate_tradingeconomics",
@@ -183,7 +201,8 @@
       "tolerance": 0.06,
       "scrape_config": {
         "regex": "(\\d+\\.\\d+)"
-      }
+      },
+      "source_type": "SCRAPE"
     },
     {
       "indicator_id": "fx_currency_catalog",
@@ -193,7 +212,8 @@
       "json_path": "fjd",
       "ui_value": "Papua New Guinean Kina",
       "unit": "name",
-      "tolerance": 0
+      "tolerance": 0,
+      "source_type": "API"
     },
     {
       "indicator_id": "fx_rate_usd_pgk",
@@ -203,7 +223,8 @@
       "json_path": "usd.fjd || rates.FJD",
       "ui_value": 4.5346,
       "unit": "FJD",
-      "tolerance": 0.06
+      "tolerance": 0.06,
+      "source_type": "API"
     },
     {
       "indicator_id": "gcf_eligibility",
@@ -217,7 +238,8 @@
       "scrape_config": {
         "regex": "Fiji",
         "value_if_found": "Yes"
-      }
+      },
+      "source_type": "SCRAPE"
     },
     {
       "indicator_id": "gdp_current_usd",
@@ -227,7 +249,8 @@
       "json_path": "[1][0].value",
       "ui_value": 32500000000,
       "unit": "USD",
-      "tolerance": 0.05
+      "tolerance": 0.05,
+      "source_type": "API"
     },
     {
       "indicator_id": "gdp_per_capita_usd",
@@ -237,7 +260,8 @@
       "json_path": "[1][0].value",
       "ui_value": 3020,
       "unit": "USD",
-      "tolerance": 0.05
+      "tolerance": 0.05,
+      "source_type": "API"
     },
     {
       "indicator_id": "population_macro_25",
@@ -247,7 +271,8 @@
       "json_path": "[1][0].value",
       "ui_value": 10762817,
       "unit": "count",
-      "tolerance": 0
+      "tolerance": 0,
+      "source_type": "API"
     },
     {
       "indicator_id": "inflation_cpi",
@@ -257,7 +282,8 @@
       "json_path": "[1][0].value",
       "ui_value": 4.4,
       "unit": "%",
-      "tolerance": 0.1
+      "tolerance": 0.1,
+      "source_type": "API"
     },
     {
       "indicator_id": "fdi_net_inflows_usd",
@@ -267,7 +293,8 @@
       "json_path": "[1][0].value",
       "ui_value": -198300000,
       "unit": "USD",
-      "tolerance": 0.05
+      "tolerance": 0.05,
+      "source_type": "API"
     },
     {
       "indicator_id": "remittances_received_usd",
@@ -277,7 +304,8 @@
       "json_path": "[1][0].value",
       "ui_value": 3900000,
       "unit": "USD",
-      "tolerance": 0.05
+      "tolerance": 0.05,
+      "source_type": "API"
     },
     {
       "indicator_id": "renewable_electricity_output_pct",
@@ -287,7 +315,8 @@
       "json_path": "[1][0].value",
       "ui_value": 40,
       "unit": "%",
-      "tolerance": 0.1
+      "tolerance": 0.1,
+      "source_type": "API"
     },
     {
       "indicator_id": "renewable_non_hydro_pct",
@@ -297,7 +326,8 @@
       "json_path": "[1][0].value",
       "ui_value": 4.7,
       "unit": "%",
-      "tolerance": 0.1
+      "tolerance": 0.1,
+      "source_type": "API"
     },
     {
       "indicator_id": "co2_emissions_per_capita",
@@ -307,7 +337,8 @@
       "json_path": "[1][0].value",
       "ui_value": 0.52,
       "unit": "metric tons",
-      "tolerance": 0.05
+      "tolerance": 0.05,
+      "source_type": "API"
     },
     {
       "indicator_id": "land_area_sq_km",
@@ -317,7 +348,8 @@
       "json_path": "[1][0].value",
       "ui_value": 452860,
       "unit": "sq km",
-      "tolerance": 0.05
+      "tolerance": 0.05,
+      "source_type": "API"
     },
     {
       "indicator_id": "wgi_regulatory_quality",
@@ -327,7 +359,8 @@
       "json_path": "[1][0].value",
       "ui_value": -0.6,
       "unit": "score",
-      "tolerance": 0.25
+      "tolerance": 0.25,
+      "source_type": "API"
     },
     {
       "indicator_id": "wgi_rule_of_law",
@@ -337,7 +370,8 @@
       "json_path": "[1][0].value",
       "ui_value": -0.57,
       "unit": "score",
-      "tolerance": 0.25
+      "tolerance": 0.25,
+      "source_type": "API"
     },
     {
       "indicator_id": "wgi_political_stability",
@@ -347,7 +381,8 @@
       "json_path": "[1][0].value",
       "ui_value": -0.65,
       "unit": "score",
-      "tolerance": 0.25
+      "tolerance": 0.25,
+      "source_type": "API"
     },
     {
       "indicator_id": "wgi_government_effectiveness",
@@ -357,7 +392,8 @@
       "json_path": "[1][0].value",
       "ui_value": -0.9,
       "unit": "score",
-      "tolerance": 0.25
+      "tolerance": 0.25,
+      "source_type": "API"
     },
     {
       "indicator_id": "wgi_control_of_corruption",
@@ -367,7 +403,8 @@
       "json_path": "[1][0].value",
       "ui_value": -0.78,
       "unit": "score",
-      "tolerance": 0.25
+      "tolerance": 0.25,
+      "source_type": "API"
     },
     {
       "indicator_id": "wgi_voice_accountability",
@@ -377,7 +414,8 @@
       "json_path": "[1][0].value",
       "ui_value": -0.33,
       "unit": "score",
-      "tolerance": 0.25
+      "tolerance": 0.25,
+      "source_type": "API"
     }
   ]
 }

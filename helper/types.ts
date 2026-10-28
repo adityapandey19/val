@@ -50,6 +50,32 @@ export interface ScrapeConfig {
    * Ideal for existence/eligibility checks (e.g. "Yes").
    */
   readonly value_if_found?: string | number;
+
+  /**
+   * If true, and the scraped HTML page contains a link to a PDF document,
+   * the scraper follows the PDF link, downloads it, and extracts text.
+   */
+  readonly follow_pdf_links?: boolean;
+
+  /** Attribute name to read from the matched element (e.g. "href", "content"). */
+  readonly attribute?: string;
+}
+
+/**
+ * Configuration for parsing XML / RSS / Atom feeds.
+ */
+export interface XmlConfig {
+  /** XML selector or tag query (e.g. "channel > item > title", "feed > entry > title"). */
+  readonly xml_path?: string;
+
+  /** Mode of extraction: item_count, latest_title, keyword_match, or custom_selector. */
+  readonly extraction_mode?: "item_count" | "latest_title" | "keyword_match" | "custom_selector";
+
+  /** Optional keyword to check against title or description in feed items. */
+  readonly keyword?: string;
+
+  /** Optional static value returned if match is found (e.g. "Active", "Yes"). */
+  readonly value_if_found?: string | number;
 }
 
 export interface Indicator {
@@ -63,6 +89,10 @@ export interface Indicator {
   readonly tolerance: number;
   /** Optional scraping configuration for HTML / PDF sources. */
   readonly scrape_config?: ScrapeConfig | null;
+  /** Optional XML / RSS extraction configuration. */
+  readonly xml_config?: XmlConfig | null;
+  /** Explicit source type descriptor (optional) */
+  readonly source_type?: "API" | "PDF" | "SCRAPE" | "XML" | "CSV" | "INTERNAL";
 }
 
 

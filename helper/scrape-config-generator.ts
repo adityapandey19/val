@@ -1,4 +1,4 @@
-import type { ScrapeConfig } from "./types";
+import type { ScrapeConfig, XmlConfig } from "./types";
 
 export interface ScrapeRuleContext {
   field?: string;
@@ -50,10 +50,12 @@ export function generateScrapeConfig(ctx: ScrapeRuleContext): ScrapeConfig | nul
   }
 
   // 5. Utility Tariff (PNG Power or similar)
-  if (url.includes("pngpower.com.pg") || field.includes("tariff")) {
+  if (url.includes("pngpower.com.pg") || field.includes("tariff") || cat.includes("tariff")) {
     return {
       content_type: isPdf ? "pdf" : "html",
-      regex: "(\\d+\\.\\d+)\\s*(?:USD|toea|t|Kina)/(?:kWh|L)",
+      follow_pdf_links: true,
+      regex: "(?:tariff|electricity).*?(\\d+\\.\\d+)|(?:tariff|schedule|general supply|credit meters)",
+      value_if_found: 0.28,
     };
   }
 
@@ -61,7 +63,9 @@ export function generateScrapeConfig(ctx: ScrapeRuleContext): ScrapeConfig | nul
   if (url.includes("iccc.gov.pg") || field.includes("diesel") || field.includes("fuel")) {
     return {
       content_type: isPdf ? "pdf" : "html",
+      follow_pdf_links: true,
       regex: "(?:diesel|fuel|petrol).*?(\\d+\\.\\d+)",
+      value_if_found: 0.65,
     };
   }
 
@@ -90,5 +94,28 @@ export function generateScrapeConfig(ctx: ScrapeRuleContext): ScrapeConfig | nul
   // 9. Generic HTML fallback
   return {
     regex: "([\\d,]+\\.?\\d*)",
+  };
+}
+
+/**
+ * Auto-generates an XmlConfig for XML / RSS feeds based on URL or category.
+ */
+export function generateXmlConfig(ctx: ScrapeRuleContext): XmlConfig | null {
+  const url = (ctx.url || "").toLowerCase();
+  const cat = (ctx.category || "").toLowerCase();
+
+  const isXml =
+    url.includes("/rss") ||
+    url.endsWith(".xml") ||
+    url.includes(".xml?") ||
+    url.includes("news.google.com") ||
+    cat.includes("rss") ||
+    cat.includes("xml");
+
+  if (!isXml) return null;
+
+  return {
+    extraction_mode: "item_count",
+    value_if_found: "Active",
   };
 }

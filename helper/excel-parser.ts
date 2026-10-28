@@ -2,7 +2,7 @@ import fs from "fs";
 import path from "path";
 import * as XLSX from "xlsx";
 import type { Indicator } from "./types";
-import { generateScrapeConfig } from "./scrape-config-generator";
+import { generateScrapeConfig, generateXmlConfig } from "./scrape-config-generator";
 import {
   loadLiveSnap,
   getCountryIndicator,
@@ -102,8 +102,8 @@ export function parseWizardStep1Rows(
   const iso3 = countryCfg.iso3;
 
   // Coordinates from LIVE_SNAP or fallback to config
-  const snapLat = getProvinceResource(liveSnap, iso3, province, "lat");
-  const snapLon = getProvinceResource(liveSnap, iso3, province, "lon");
+  const snapLat = getProvinceResource(liveSnap, iso3, province, "lat", countryCfg.country);
+  const snapLon = getProvinceResource(liveSnap, iso3, province, "lon", countryCfg.country);
   const lat = typeof snapLat === "number" ? snapLat : countryCfg.coordinates.latitude;
   const lon = typeof snapLon === "number" ? snapLon : countryCfg.coordinates.longitude;
 
@@ -133,6 +133,27 @@ export function parseWizardStep1Rows(
     let unit = "";
     let tolerance = 0;
     let scrapeConfig = null;
+    let xmlConfig = null;
+
+    const isXml =
+      sourceType === "XML" ||
+      sourceType === "RSS Feed" ||
+      rawUrl.includes("/rss") ||
+      rawUrl.toLowerCase().endsWith(".xml") ||
+      rawUrl.includes(".xml?") ||
+      sourceCategory.toLowerCase().includes("rss") ||
+      sourceCategory.toLowerCase().includes("xml");
+
+    if (isXml) {
+      xmlConfig = generateXmlConfig({
+        field: wizardField,
+        category: sourceCategory,
+        url: rawUrl,
+        countryName: countryCfg.country,
+      });
+      uiValue = "Active";
+      unit = "status";
+    }
 
     // ── Location Section ─────────────────────────────────────────────────────
     if (screenSection === "Location") {
@@ -216,7 +237,7 @@ export function parseWizardStep1Rows(
           url: rawUrl,
           countryName: countryCfg.country,
         });
-        const val = getCountryIndicator(liveSnap, iso3, ["repo", "kina facility rate"]);
+        const val = getCountryIndicator(liveSnap, iso3, ["repo", "kina facility rate"], countryCfg.country);
         uiValue = val !== null ? Number(val) : 5.0;
         unit = "%";
         tolerance = 0;
@@ -230,7 +251,8 @@ export function parseWizardStep1Rows(
           url: rawUrl,
           countryName: countryCfg.country,
         });
-        uiValue = 0.28;
+        const val = getCountryIndicator(liveSnap, iso3, ["tariff", "grid tariff"], countryCfg.country);
+        uiValue = val !== null ? Number(val) : 0.28;
         unit = "USD/kWh";
         tolerance = 0.04;
       } else if (wizardField.includes("Diesel Cost")) {
@@ -256,7 +278,7 @@ export function parseWizardStep1Rows(
           url: rawUrl,
           countryName: countryCfg.country,
         });
-        const val = getCountryIndicator(liveSnap, iso3, ["tax", "tax rate"]);
+        const val = getCountryIndicator(liveSnap, iso3, ["tax", "tax rate", "cit"], countryCfg.country);
         uiValue = val !== null ? Number(val) : 30;
         unit = "%";
         tolerance = 0;
@@ -341,7 +363,8 @@ export function parseWizardStep1Rows(
         tolerance = 0;
       } else if (wizardField.includes("Utility")) {
         indicatorId = "utility_provider";
-        uiValue = "PNG Power Ltd";
+        const val = getCountryIndicator(liveSnap, iso3, ["utility"], countryCfg.country);
+        uiValue = (val as string) || (countryCfg.country === "Papua New Guinea" ? "PNG Power Ltd" : `${countryCfg.country} Power Utility`);
         unit = "name";
       }
     }
@@ -479,6 +502,19 @@ export function parseWizardStep1Rows(
       indicatorId = `ind_${index + 1}_${wizardField.toLowerCase().replace(/[^a-z0-9]+/g, "_")}`;
     }
 
+    let sourceTypeDesc: "API" | "PDF" | "SCRAPE" | "XML" | "CSV" | "INTERNAL" = "API";
+    if (isInternal) {
+      sourceTypeDesc = "INTERNAL";
+    } else if (templatedUrl.toLowerCase().endsWith(".pdf") || scrapeConfig?.content_type === "pdf") {
+      sourceTypeDesc = "PDF";
+    } else if (isXml || xmlConfig) {
+      sourceTypeDesc = "XML";
+    } else if (scrapeConfig || sourceType.toLowerCase().includes("scrape")) {
+      sourceTypeDesc = "SCRAPE";
+    } else if (templatedUrl.toLowerCase().endsWith(".csv") || templatedUrl.includes("format=csv")) {
+      sourceTypeDesc = "CSV";
+    }
+
     indicators.push({
       indicator_id: indicatorId,
       category,
@@ -489,6 +525,8 @@ export function parseWizardStep1Rows(
       unit,
       tolerance,
       ...(scrapeConfig ? { scrape_config: scrapeConfig } : {}),
+      ...(xmlConfig ? { xml_config: xmlConfig } : {}),
+      source_type: sourceTypeDesc,
     });
   });
 
@@ -537,4 +575,45 @@ export function parseExcelSources(options?: ParseOptions): Indicator[] {
   }));
 
   return parseWizardStep1Rows(legacyRows, liveSnap, countryCfg, province, includeInternal);
+}
+
+/**
+ * Loads XML/RSS news indicators from LIVE_SNAP.news in RXBE_live_Template.html.
+ */
+export function loadNewsXmlIndicators(htmlPath?: string, countryCode = "PG"): Indicator[] {
+  const liveSnap = loadLiveSnap(htmlPath);
+  const countryCfg = getCountryConfig(countryCode);
+  const iso3 = countryCfg.iso3;
+  const newsList = liveSnap.news?.[iso3]?.news || [];
+
+  const xmlNews = newsList.filter(
+    (n) => n.url && (n.source?.includes("RSS") || n.url.includes("/rss") || n.url.endsWith(".xml"))
+  );
+
+  return xmlNews.map((item, idx) => {
+    const topic = item.topic || `News ${idx + 1}`;
+    const slug = topic
+      .split("—")[0]
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "_")
+      .slice(0, 30);
+
+    return {
+      indicator_id: `xml_news_${idx + 1}_${slug}`,
+      category: item.source || "Google News RSS",
+      display_name: topic.length > 70 ? topic.slice(0, 67) + "..." : topic,
+      source_url: item.url!,
+      json_path: null,
+      ui_value: item.headline ? item.headline.slice(0, 80) : "Active",
+      unit: "headline",
+      tolerance: 0,
+      xml_config: {
+        extraction_mode: "item_count",
+        keyword: countryCfg.country,
+        value_if_found: "Active",
+      },
+      source_type: "XML" as const,
+    };
+  });
 }
