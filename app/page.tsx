@@ -13,9 +13,9 @@ export default function Home() {
   >("ALL");
   const [activeTab, setActiveTab] = useState<"dashboard" | "json">("dashboard");
   const [customJson, setCustomJson] = useState("");
-  const [currentMode, setCurrentMode] = useState<"pdf" | "excel" | "all">("all");
+  const [currentMode, setCurrentMode] = useState<"wizard" | "pdf" | "excel" | "all">("wizard");
 
-  async function runValidation(mode: "pdf" | "excel" | "all" | "custom") {
+  async function runValidation(mode: "wizard" | "pdf" | "excel" | "all" | "custom") {
     setLoading(true);
     setError(null);
     if (mode !== "custom") {
@@ -35,6 +35,8 @@ export default function Home() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(body),
         });
+      } else if (mode === "wizard") {
+        res = await fetch("/api/data?wizard=true");
       } else if (mode === "pdf") {
         res = await fetch("/api/data?pdf_only=true");
       } else if (mode === "excel") {
@@ -169,6 +171,18 @@ export default function Home() {
           </div>
 
           <div className="flex flex-wrap items-center gap-2.5">
+            <button
+              onClick={() => runValidation("wizard")}
+              disabled={loading}
+              className={`px-3.5 py-2 rounded-lg font-medium text-xs transition-colors shadow-lg flex items-center gap-1.5 cursor-pointer ${
+                currentMode === "wizard"
+                  ? "bg-amber-600 text-white shadow-amber-950 ring-2 ring-amber-400/50"
+                  : "bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700"
+              }`}
+            >
+              <span>⚡</span>
+              Wizard Step 1 (34)
+            </button>
             <button
               onClick={() => runValidation("pdf")}
               disabled={loading}

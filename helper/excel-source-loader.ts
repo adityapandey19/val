@@ -322,3 +322,18 @@ export function loadAllIndicators(): Indicator[] {
   const pdfs = loadPdfIndicators();
   return [...apis, ...pdfs];
 }
+
+/**
+ * Loads the Wizard Step 1 indicators from RXBE_Wizard_Step1_Sources_Keys.xlsx
+ * mapped with LIVE_SNAP values.
+ */
+export function loadWizardStep1Indicators(options?: {
+  countryCode?: string;
+  province?: string;
+  includeInternal?: boolean;
+}): Indicator[] {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { parseExcelSources } = require("./excel-parser");
+  return parseExcelSources(options);
+}
+

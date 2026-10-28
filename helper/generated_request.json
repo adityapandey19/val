@@ -1,0 +1,32 @@
+{
+  "request_id": "REQ-VERIFY-PNG-national-capital-district-20261026",
+  "timestamp": "2026-10-26T12:11:00.489Z",
+  "project_metadata": {
+    "country": "Papua New Guinea",
+    "country_code": "PG",
+    "iso3": "PNG",
+    "province": "National Capital District",
+    "coordinates": {
+      "latitude": -9.416667,
+      "longitude": 147.166667
+    },
+    "grid_connection_type": "Grid-Connected",
+    "distance_to_grid_km": 5
+  },
+  "indicators": [
+    {
+      "indicator_id": "grid_electricity_tariff",
+      "category": "Utility Tariff & Data",
+      "display_name": "Grid Electricity Tariff (General Supply)",
+      "source_url": "https://www.pngpower.com.pg/notices/54",
+      "json_path": null,
+      "ui_value": 0.28,
+      "unit": "USD/kWh",
+      "tolerance": 0.04,
+      "scrape_config": {
+        "content_type": "html",
+        "regex": "(\\d+\\.\\d+)\\s*(?:USD|toea|t|Kina)/(?:kWh|L)"
+      }
+    }
+  ]
+}

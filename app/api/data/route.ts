@@ -10,6 +10,7 @@ import {
   loadExcelApiIndicators,
   loadPdfIndicators,
   loadAllIndicators,
+  loadWizardStep1Indicators,
 } from "@/helper/excel-source-loader";
 
 /**
@@ -91,18 +92,21 @@ async function processValidation(
 
 /**
  * Loads indicators according to the requested mode:
+ *  - "wizard" / "step1": All 34 Wizard Step 1 indicators from RXBE_Wizard_Step1_Sources_Keys.xlsx
  *  - "pdf": All 18 PDF source indicators from Excel & template
  *  - "excel" / "api": All 112 structured API indicators from the Excel registry
  *  - "all": Full unified set of 130 indicators (112 Excel APIs + 18 PDF sources)
  */
-function loadFallbackIndicators(mode: "pdf" | "excel" | "all" = "all"): {
+function loadFallbackIndicators(mode: "wizard" | "pdf" | "excel" | "all" = "all"): {
   indicators: Indicator[];
   country: string;
   countryCode: string;
 } {
   try {
     let indicators: Indicator[] = [];
-    if (mode === "pdf") {
+    if (mode === "wizard") {
+      indicators = loadWizardStep1Indicators();
+    } else if (mode === "pdf") {
       indicators = loadPdfIndicators();
     } else if (mode === "excel") {
       indicators = loadExcelApiIndicators();
@@ -192,13 +196,18 @@ export async function POST(request: NextRequest) {
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
+    const isWizard =
+      searchParams.get("wizard") === "true" ||
+      searchParams.get("step1") === "true";
     const isPdfOnly = searchParams.get("pdf_only") === "true";
     const isExcelOnly =
       searchParams.get("excel_only") === "true" ||
       searchParams.get("api_only") === "true";
 
-    let mode: "pdf" | "excel" | "all" = "all";
-    if (isPdfOnly) {
+    let mode: "wizard" | "pdf" | "excel" | "all" = "all";
+    if (isWizard) {
+      mode = "wizard";
+    } else if (isPdfOnly) {
       mode = "pdf";
     } else if (isExcelOnly) {
       mode = "excel";
