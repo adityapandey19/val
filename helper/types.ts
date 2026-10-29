@@ -136,6 +136,27 @@ export interface ValidationResponse {
   readonly executed_at: string;
   readonly country: string;
   readonly country_code: string;
+  readonly province?: string;
   readonly summary: ValidationSummary;
   readonly results: IndicatorResult[];
+}
+
+export interface SheetMetadata {
+  readonly name: string;
+  readonly rowCount: number;
+  readonly columnCount: number;
+  readonly columns: readonly string[];
+  readonly hasIndicators: boolean;
+}
+
+export interface WorkbookInfo {
+  readonly fileName: string;
+  readonly displayName: string;
+  readonly filePath: string;
+  readonly isDefault: boolean;
+  readonly country?: string;
+  readonly countryCode?: string;
+  readonly province?: string;
+  readonly uploadedAt?: string;
+  readonly sheets: SheetMetadata[];
 }

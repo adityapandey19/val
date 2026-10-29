@@ -161,6 +161,100 @@ export const COUNTRY_CONFIGS: Record<string, CountryConfig> = {
   },
 };
 
+/** Known provinces, states, and administrative divisions per country */
+export const COUNTRY_PROVINCES: Record<string, string[]> = {
+  PG: [
+    "National Capital District",
+    "Central Province",
+    "Western Province",
+    "Gulf Province",
+    "Milne Bay Province",
+    "Oro (Northern) Province",
+    "Morobe Province",
+    "Madang Province",
+    "East Sepik Province",
+    "West Sepik (Sandaun)",
+    "Manus Province",
+    "New Ireland Province",
+    "East New Britain",
+    "West New Britain",
+    "Western Highlands",
+    "Eastern Highlands",
+    "Simbu (Chimbu)",
+    "Southern Highlands",
+    "Enga Province",
+    "Autonomous Region of Bougainville",
+  ],
+  FJ: [
+    "Central Division (Viti Levu E)",
+    "Western Division (Viti Levu W)",
+    "Northern Division (Vanua Levu)",
+    "Eastern Division (Lau/Lomaiviti)",
+  ],
+  VU: [
+    "Shefa (Efate/Shepherd)",
+    "Sanma (Santo/Malo)",
+    "Torba (Banks/Torres)",
+    "Penama (Pentecost/Ambae)",
+    "Malampa (Malekula/etc)",
+    "Tafea (Tanna/Erromango)",
+  ],
+  SB: [
+    "Guadalcanal",
+    "Malaita",
+    "Western Province",
+    "Central Province",
+    "Makira-Ulawa",
+    "Isabel Province",
+    "Choiseul Province",
+    "Rennell & Bellona",
+    "Temotu Province",
+  ],
+  TO: [
+    "Tongatapu",
+    "Vavau Group",
+    "Haapai Group",
+    "Eua Island",
+    "Niuas Group",
+  ],
+  WS: [
+    "Apia Urban Area",
+    "Northwest Upolu",
+    "Rest of Upolu",
+    "Savaii Island",
+  ],
+  KI: [
+    "Gilbert Islands (South Tarawa)",
+    "Gilbert Islands (Outer)",
+    "Line Islands (Kiritimati)",
+    "Phoenix Islands",
+  ],
+  TV: [
+    "Funafuti Atoll",
+    "Northern Atolls",
+    "Southern Atolls",
+  ],
+  MH: [
+    "Majuro Atoll",
+    "Kwajalein Atoll",
+    "Outer Islands",
+  ],
+  FM: [
+    "Pohnpei State",
+    "Chuuk State",
+    "Yap State",
+    "Kosrae State",
+  ],
+  PW: [
+    "Koror State",
+    "Babeldaob Island",
+    "Southwest Islands",
+  ],
+  NR: [
+    "Nauru (single district)",
+  ],
+};
+
 /** Alias map allowing lookups by iso3 or country code */
 export function getCountryConfig(codeOrIso: string): CountryConfig {
   const upper = (codeOrIso || "PG").trim().toUpperCase();
@@ -173,4 +267,33 @@ export function getCountryConfig(codeOrIso: string): CountryConfig {
     }
   }
   return COUNTRY_CONFIGS["PG"];
+}
+
+/** Returns the list of provinces/states for a given country code or name */
+export function getCountryProvinces(codeOrIso: string): string[] {
+  const cfg = getCountryConfig(codeOrIso);
+  const provs = COUNTRY_PROVINCES[cfg.country_code];
+  if (provs && provs.length > 0) {
+    return provs;
+  }
+  return [cfg.default_province];
+}
+
+export interface CountryOption {
+  code: string;
+  name: string;
+  iso3: string;
+  defaultProvince: string;
+  provinces: string[];
+}
+
+/** Returns all configured countries with their codes and provinces */
+export function getAvailableCountryOptions(): CountryOption[] {
+  return Object.values(COUNTRY_CONFIGS).map((cfg) => ({
+    code: cfg.country_code,
+    name: cfg.country,
+    iso3: cfg.iso3,
+    defaultProvince: cfg.default_province,
+    provinces: COUNTRY_PROVINCES[cfg.country_code] || [cfg.default_province],
+  }));
 }

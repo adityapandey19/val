@@ -1,101 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import type {
-  ValidationRequest,
-  ValidationResponse,
-  IndicatorResult,
-  Indicator,
-} from "@/helper/types";
-import { validateIndicator } from "@/helper/indicator-validator";
+import type { ValidationRequest, Indicator } from "@/helper/types";
 import {
   loadPdfIndicators,
   loadWizardStep1Indicators,
 } from "@/helper/excel-source-loader";
-
-/**
- * Helper to execute validation for an array of indicators and construct
- * the standard ValidationResponse.
- */
-async function processValidation(
-  indicators: Indicator[],
-  country = "Papua New Guinea",
-  countryCode = "PG"
-): Promise<ValidationResponse> {
-  // Use a worker pool with max 4 concurrent requests to prevent bandwidth exhaustion,
-  // Nominatim rate-limiting (max 1 req/sec), and timeout cascades on slower connections.
-  const CONCURRENCY = 4;
-  const results: IndicatorResult[] = new Array(indicators.length);
-  let currentIndex = 0;
-
-  async function worker() {
-    while (currentIndex < indicators.length) {
-      const idx = currentIndex++;
-      const indicator = indicators[idx];
-      try {
-        results[idx] = await validateIndicator(indicator);
-      } catch (error) {
-        results[idx] = {
-          indicator_id: indicator.indicator_id,
-          display_name: indicator.display_name,
-          source_url: indicator.source_url,
-          source_value: null,
-          ui_value: indicator.ui_value,
-          tolerance: indicator.tolerance,
-          difference: null,
-          status: "ERROR" as const,
-          is_matched: false,
-          message:
-            error instanceof Error
-              ? error.message
-              : "Unexpected validation failure.",
-        };
-      }
-    }
-  }
-
-  const workerCount = Math.min(CONCURRENCY, indicators.length);
-  const workers = Array.from({ length: workerCount }, () => worker());
-  await Promise.all(workers);
-
-  let matched = 0;
-  let mismatched = 0;
-  let skipped = 0;
-  let errors = 0;
-
-  for (const r of results) {
-    switch (r.status) {
-      case "SUCCESS":
-        if (r.is_matched) matched++;
-        else mismatched++;
-        break;
-      case "SKIPPED":
-        skipped++;
-        break;
-      case "ERROR":
-        errors++;
-        break;
-    }
-  }
-
-  const overall_status = mismatched === 0 && errors === 0;
-  const now = new Date();
-  const testRunId = `RUN-${now.toISOString().slice(0, 10)}-${String(now.getTime()).slice(-4)}`;
-
-  return {
-    test_run_id: testRunId,
-    executed_at: now.toISOString(),
-    country,
-    country_code: countryCode,
-    summary: {
-      total_indicators: results.length,
-      matched,
-      mismatched,
-      skipped,
-      errors,
-      overall_status,
-    },
-    results,
-  };
-}
+import { processValidation } from "@/helper/validation-processor";
 
 /**
  * Loads indicators according to the requested mode:

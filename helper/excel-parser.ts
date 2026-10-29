@@ -31,6 +31,7 @@ export interface WizardExcelRow {
 
 export interface ParseOptions {
   excelPath?: string;
+  sheetName?: string;
   htmlPath?: string;
   countryCode?: string;
   province?: string;
@@ -552,8 +553,14 @@ export function parseExcelSources(options?: ParseOptions): Indicator[] {
 
   const fileBuffer = fs.readFileSync(excelPath);
   const wb = XLSX.read(fileBuffer, { type: "buffer" });
-  const sheetName = wb.SheetNames[0];
+  const sheetName =
+    options?.sheetName && wb.SheetNames.includes(options.sheetName)
+      ? options.sheetName
+      : wb.SheetNames[0];
   const sheet = wb.Sheets[sheetName];
+  if (!sheet) {
+    return [];
+  }
   const rows = XLSX.utils.sheet_to_json<WizardExcelRow>(sheet);
 
   const liveSnap = loadLiveSnap(htmlPath);
@@ -565,7 +572,7 @@ export function parseExcelSources(options?: ParseOptions): Indicator[] {
     return parseWizardStep1Rows(rows, liveSnap, countryCfg, province, includeInternal);
   }
 
-  // If old/legacy format (with 204 rows and "Data Points to Capture")
+  // If old/legacy format (with "Data Points to Capture")
   const legacyRows = rows.map((r, i) => ({
     "Screen Section": (r["AI Layer"] as string) || "General",
     "Wizard Field": ((r["Data Points to Capture"] as string) || "").split("—")[0].trim() || `Row ${i + 1}`,
@@ -575,6 +582,36 @@ export function parseExcelSources(options?: ParseOptions): Indicator[] {
   }));
 
   return parseWizardStep1Rows(legacyRows, liveSnap, countryCfg, province, includeInternal);
+}
+
+import type { SheetMetadata } from "./types";
+export type { SheetMetadata };
+
+/**
+ * Inspects an Excel workbook file and returns metadata for all its sheets.
+ */
+export function inspectWorkbookSheets(excelPath: string): SheetMetadata[] {
+  if (!fs.existsSync(excelPath)) {
+    return [];
+  }
+  const fileBuffer = fs.readFileSync(excelPath);
+  const wb = XLSX.read(fileBuffer, { type: "buffer" });
+  return wb.SheetNames.map((name) => {
+    const sheet = wb.Sheets[name];
+    const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet);
+    const columns = rows.length > 0 ? Object.keys(rows[0]) : [];
+    const hasIndicators =
+      columns.some((c) =>
+        /wizard field|data points|indicator|url|source/i.test(c)
+      ) || rows.length > 0;
+    return {
+      name,
+      rowCount: rows.length,
+      columnCount: columns.length,
+      columns,
+      hasIndicators,
+    };
+  });
 }
 
 /**

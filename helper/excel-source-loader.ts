@@ -18,6 +18,8 @@ export function loadPdfIndicators(): Indicator[] {
  * mapped with LIVE_SNAP values.
  */
 export function loadWizardStep1Indicators(options?: {
+  excelPath?: string;
+  sheetName?: string;
   countryCode?: string;
   province?: string;
   includeInternal?: boolean;

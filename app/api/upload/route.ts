@@ -1,0 +1,187 @@
+import { NextRequest, NextResponse } from "next/server";
+import fs from "fs";
+import path from "path";
+import { inspectWorkbookSheets } from "@/helper/excel-parser";
+import { getCountryConfig } from "@/helper/country-config";
+
+const UPLOAD_DIR = path.resolve(process.cwd(), "uploads");
+
+function sanitizeDirSegment(name: string): string {
+  return name
+    .trim()
+    .replace(/[^a-zA-Z0-9_\-\s]/g, "")
+    .replace(/\s+/g, "_");
+}
+
+export async function POST(request: NextRequest) {
+  try {
+    const formData = await request.formData();
+    const file = formData.get("file");
+
+    if (!file || typeof file === "string") {
+      return NextResponse.json(
+        { error: "No file provided in form data under 'file' field." },
+        { status: 400 }
+      );
+    }
+
+    const blob = file as File;
+    const originalName = blob.name || "uploaded.xlsx";
+    const ext = path.extname(originalName).toLowerCase();
+
+    if (ext !== ".xlsx" && ext !== ".xls") {
+      return NextResponse.json(
+        { error: "Invalid file format. Only .xlsx and .xls Excel files are supported." },
+        { status: 400 }
+      );
+    }
+
+    // Extract country and state/province details
+    const rawCountry = formData.get("country");
+    const rawCountryCode = formData.get("countryCode");
+    const rawProvince = formData.get("province");
+
+    const countryConfig = getCountryConfig(
+      typeof rawCountryCode === "string" && rawCountryCode
+        ? rawCountryCode
+        : typeof rawCountry === "string"
+          ? rawCountry
+          : "PG"
+    );
+
+    const country =
+      typeof rawCountry === "string" && rawCountry.trim()
+        ? rawCountry.trim()
+        : countryConfig.country;
+
+    const countryCode = countryConfig.country_code;
+
+    const province =
+      typeof rawProvince === "string" && rawProvince.trim()
+        ? rawProvince.trim()
+        : countryConfig.default_province;
+
+    // Build directory structure: uploads/<country>/<states>/<sheet>
+    const countryDir = sanitizeDirSegment(country);
+    const stateDir = sanitizeDirSegment(province);
+    const targetDir = path.join(UPLOAD_DIR, countryDir, stateDir);
+
+    if (!fs.existsSync(targetDir)) {
+      fs.mkdirSync(targetDir, { recursive: true });
+    }
+
+    // Sanitize filename to avoid directory traversal
+    const baseClean = path
+      .basename(originalName, ext)
+      .replace(/[^a-zA-Z0-9_\-\s]/g, "")
+      .trim()
+      .replace(/\s+/g, "_");
+
+    const safeName = `${baseClean || "workbook"}_${Date.now()}${ext}`;
+    const destinationPath = path.join(targetDir, safeName);
+
+    const arrayBuffer = await blob.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
+    fs.writeFileSync(destinationPath, buffer);
+
+    // Save companion metadata file
+    const metaPath = `${destinationPath}.meta.json`;
+    const metadata = {
+      country,
+      countryCode,
+      province,
+      displayName: originalName,
+      fileName: safeName,
+      uploadedAt: new Date().toISOString(),
+    };
+    fs.writeFileSync(metaPath, JSON.stringify(metadata, null, 2));
+
+    const sheets = inspectWorkbookSheets(destinationPath);
+
+    return NextResponse.json(
+      {
+        success: true,
+        fileName: safeName,
+        displayName: originalName,
+        country,
+        countryCode,
+        province,
+        directory: path.relative(process.cwd(), targetDir),
+        filePath: path.relative(process.cwd(), destinationPath),
+        sheets,
+        uploadedAt: metadata.uploadedAt,
+      },
+      { status: 201 }
+    );
+  } catch (error: unknown) {
+    console.error("Upload error:", error);
+    return NextResponse.json(
+      {
+        error: error instanceof Error ? error.message : "Failed to process upload.",
+      },
+      { status: 500 }
+    );
+  }
+}
+
+export async function DELETE(request: NextRequest) {
+  try {
+    const { searchParams } = new URL(request.url);
+    const filePathParam = searchParams.get("filePath");
+    const fileNameParam = searchParams.get("fileName");
+
+    const targetParam = filePathParam || fileNameParam;
+    if (!targetParam) {
+      return NextResponse.json(
+        { error: "filePath or fileName query parameter is required." },
+        { status: 400 }
+      );
+    }
+
+    const resolvedPath = path.resolve(process.cwd(), targetParam);
+
+    // Path traversal security check: must be inside UPLOAD_DIR
+    if (!resolvedPath.startsWith(UPLOAD_DIR)) {
+      return NextResponse.json(
+        { error: "Access denied. Cannot delete files outside uploads/ directory." },
+        { status: 403 }
+      );
+    }
+
+    if (fs.existsSync(resolvedPath)) {
+      fs.unlinkSync(resolvedPath);
+
+      // Clean up companion .meta.json if present
+      const metaPath = `${resolvedPath}.meta.json`;
+      if (fs.existsSync(metaPath)) {
+        fs.unlinkSync(metaPath);
+      }
+
+      // Clean up empty parent directories if empty
+      const parentDir = path.dirname(resolvedPath);
+      if (fs.existsSync(parentDir) && fs.readdirSync(parentDir).length === 0) {
+        fs.rmdirSync(parentDir);
+        const grandParentDir = path.dirname(parentDir);
+        if (
+          grandParentDir !== UPLOAD_DIR &&
+          fs.existsSync(grandParentDir) &&
+          fs.readdirSync(grandParentDir).length === 0
+        ) {
+          fs.rmdirSync(grandParentDir);
+        }
+      }
+
+      return NextResponse.json({
+        success: true,
+        message: `Deleted ${path.basename(resolvedPath)}`,
+      });
+    }
+
+    return NextResponse.json({ error: "File not found." }, { status: 404 });
+  } catch (error: unknown) {
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : "Failed to delete file." },
+      { status: 500 }
+    );
+  }
+}
