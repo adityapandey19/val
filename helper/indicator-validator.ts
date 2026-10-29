@@ -8,6 +8,7 @@ import {
   extractValueFromPdfText,
 } from "./pdf-extractor";
 import { extractXmlValue, isXmlContent } from "./xml-extractor";
+import { scrapeIndicator } from "@/Dev/scrapers";
 
 /** Timeout in milliseconds for fetching external APIs (increased for slower/throttled connections). */
 const FETCH_TIMEOUT_MS = 25_000;
@@ -378,6 +379,32 @@ export async function validateIndicator(
         };
       }
 
+      // Check if we have a specialized HTML scraper for this indicator
+      try {
+        const scraped = await scrapeIndicator(indicator_id, source_url);
+        if (scraped.status === "SUCCESS" && scraped.sourceValue !== null) {
+          const { isMatched, difference } = compareValues(
+            scraped.sourceValue,
+            ui_value,
+            tolerance
+          );
+          return {
+            indicator_id,
+            display_name,
+            source_url,
+            source_value: scraped.sourceValue,
+            ui_value,
+            tolerance,
+            difference,
+            status: "SUCCESS",
+            is_matched: isMatched,
+            message: scraped.message || null,
+          };
+        }
+      } catch {
+        // Fall back to default message below
+      }
+
       return {
         indicator_id,
         display_name,
@@ -392,6 +419,32 @@ export async function validateIndicator(
           "No json_path or scrape_config provided — source is an HTML page.",
       };
     } catch {
+      // Attempt HTML scrape in catch block as well in case initial fetch was blocked or timed out
+      try {
+        const scraped = await scrapeIndicator(indicator_id, source_url);
+        if (scraped.status === "SUCCESS" && scraped.sourceValue !== null) {
+          const { isMatched, difference } = compareValues(
+            scraped.sourceValue,
+            ui_value,
+            tolerance
+          );
+          return {
+            indicator_id,
+            display_name,
+            source_url,
+            source_value: scraped.sourceValue,
+            ui_value,
+            tolerance,
+            difference,
+            status: "SUCCESS",
+            is_matched: isMatched,
+            message: scraped.message || null,
+          };
+        }
+      } catch {
+        // Fall through to error
+      }
+
       return {
         indicator_id,
         display_name,

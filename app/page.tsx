@@ -10,6 +10,7 @@ import {
   getAvailableCountryOptions,
   type CountryOption,
 } from "@/helper/country-config";
+import PNGValidatorView from "@/Dev/validator/PNGValidatorView";
 
 type TypeFilter = "ALL" | "SCRAPE" | "FEED" | "PDF" | "API";
 type StatusFilter = "ALL" | "MATCHED" | "MISMATCHED" | "ERROR" | "SKIPPED";
@@ -50,7 +51,6 @@ export default function Home() {
   // Validation results states
   const [data, setData] = useState<ValidationResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
-
   // Indicators filters
   const [indicatorSearch, setIndicatorSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState<TypeFilter>("ALL");
@@ -58,6 +58,9 @@ export default function Home() {
 
   // Custom JSON modal
   const [showCustomTester, setShowCustomTester] = useState(false);
+
+  // View mode: multi-sheet validator or live PNG scrape validator
+  const [viewMode, setViewMode] = useState<"sheets" | "png">("sheets");
   const [customJson, setCustomJson] = useState("");
   const [customLoading, setCustomLoading] = useState(false);
 
@@ -545,40 +548,68 @@ export default function Home() {
                 <span>{isCurrentlyValidating ? "Validating..." : "Re-validate Sheet"}</span>
               </button>
             )}
+
+            {/* View Mode Toggle */}
+            <div className="flex items-center bg-zinc-900 border border-zinc-800 rounded-lg p-0.5">
+              <button
+                onClick={() => setViewMode("sheets")}
+                className={`text-xs px-2.5 py-1 rounded-md font-medium transition-all ${
+                  viewMode === "sheets"
+                    ? "bg-zinc-800 text-white shadow-sm"
+                    : "text-zinc-400 hover:text-white"
+                }`}
+              >
+                📊 Sheets
+              </button>
+              <button
+                onClick={() => setViewMode("png")}
+                className={`text-xs px-2.5 py-1 rounded-md font-medium transition-all ${
+                  viewMode === "png"
+                    ? "bg-emerald-600 text-white shadow-md shadow-emerald-600/30"
+                    : "text-zinc-400 hover:text-white"
+                }`}
+              >
+                🇵🇬 PNG Scrapers
+              </button>
+            </div>
           </div>
         </header>
 
-        {/* Global Error Banner */}
-        {error && (
-          <div className="p-3.5 rounded-lg bg-red-950/40 border border-red-900/50 text-red-300 text-xs flex items-center justify-between">
-            <span>{error}</span>
-            <button
-              onClick={() => setError(null)}
-              className="text-red-400 hover:text-red-200 ml-3 text-sm"
-            >
-              ✕
-            </button>
-          </div>
-        )}
-
-        {/* Custom JSON Drawer */}
-        {showCustomTester && (
-          <div className="p-4 rounded-xl bg-zinc-900/90 border border-zinc-800 space-y-3">
-            <div className="flex items-center justify-between">
-              <div>
-                <h3 className="text-xs font-semibold text-zinc-200">Custom Request Payload</h3>
-                <p className="text-[11px] text-zinc-500">
-                  Execute validation for any custom indicator array via POST /api/data
-                </p>
+        {viewMode === "png" ? (
+          <PNGValidatorView />
+        ) : (
+          <>
+            {/* Global Error Banner */}
+            {error && (
+              <div className="p-3.5 rounded-lg bg-red-950/40 border border-red-900/50 text-red-300 text-xs flex items-center justify-between">
+                <span>{error}</span>
+                <button
+                  onClick={() => setError(null)}
+                  className="text-red-400 hover:text-red-200 ml-3 text-sm"
+                >
+                  ✕
+                </button>
               </div>
-              <button
-                onClick={runCustomValidation}
-                disabled={customLoading}
-                className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-medium disabled:opacity-50 transition-colors"
-              >
-                {customLoading ? "Validating..." : "Execute Test"}
-              </button>
-            </div>
+            )}
+
+            {/* Custom JSON Drawer */}
+            {showCustomTester && (
+              <div className="p-4 rounded-xl bg-zinc-900/90 border border-zinc-800 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="text-xs font-semibold text-zinc-200">Custom Request Payload</h3>
+                    <p className="text-[11px] text-zinc-500">
+                      Execute validation for any custom indicator array via POST /api/data
+                    </p>
+                  </div>
+                  <button
+                    onClick={runCustomValidation}
+                    disabled={customLoading}
+                    className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-medium disabled:opacity-50 transition-colors"
+                  >
+                    {customLoading ? "Validating..." : "Execute Test"}
+                  </button>
+                </div>
             <textarea
               value={customJson}
               onChange={(e) => setCustomJson(e.target.value)}
@@ -1396,6 +1427,8 @@ export default function Home() {
               Select any sheet from the table above and click <span className="text-zinc-300 font-medium">Validate Sheet</span> to extract indicators and audit against live sources for that country and state.
             </p>
           </div>
+        )}
+          </>
         )}
       </div>
     </div>
